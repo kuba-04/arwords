@@ -1,0 +1,227 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../services/words_service.dart' show WordDTO, WordsService;
+import 'dart:developer' as developer;
+
+// --- Main Screen Widget ---
+
+class WordsScreen extends StatefulWidget {
+  const WordsScreen({Key? key}) : super(key: key);
+
+  @override
+  _WordsScreenState createState() => _WordsScreenState();
+}
+
+class _WordsScreenState extends State<WordsScreen> {
+  List<WordDTO> _words = [];
+  bool _isLoading = false;
+  String? _error;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  Timer? _debounceTimer;
+
+  // NOTE: Make sure to add flag assets to your pubspec.yaml
+  // assets:
+  //   - assets/images/flags/
+  static const Map<String, String> _flagMapping = {
+    'lb': 'assets/images/flags/lb.png',
+    'sa': 'assets/images/flags/sa.png',
+    'eg': 'assets/images/flags/eg.png',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      final text = _searchController.text;
+      if (text.length >= 2) {
+        _searchWords(text);
+      } else if (text.isEmpty) {
+        setState(() {
+          _words = [];
+          _isLoading = false;
+          _error = null;
+        });
+      }
+    });
+  }
+
+  Future<void> _searchWords(String query) async {
+    developer.log('Searching words with query: "$query"');
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final isArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(query);
+      final response = await WordsService.getWords(
+        arabic: isArabic ? query : null,
+        english: !isArabic ? query : null,
+      );
+      setState(() {
+        _words = response.data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      developer.log('Search failed', error: e, stackTrace: StackTrace.current);
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _resetSearch() {
+    _searchController.clear();
+    _searchFocusNode.unfocus();
+    setState(() {
+      _words = [];
+      _isLoading = false;
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          _buildContent(),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildSearchInput(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('Error: $_error', style: const TextStyle(color: Colors.red)));
+    }
+    if (_words.isEmpty && _searchController.text.length >= 2) {
+      return const Center(child: Text('No words found'));
+    }
+    if (_words.isEmpty) {
+      return const Center(child: Text('Type at least 2 characters to search'));
+    }
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: _words.length,
+      itemBuilder: (context, index) {
+        return WordItem(word: _words[_words.length - 1 - index], flagMapping: _flagMapping);
+      },
+    );
+  }
+  
+  Widget _buildSearchInput() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), // Adjust padding as needed
+      color: Colors.white,
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        onChanged: (_) => _onSearchChanged(),
+        decoration: InputDecoration(
+          hintText: 'Enter an Arabic or English word',
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _resetSearch,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+// --- Word Item Widget ---
+
+class WordItem extends StatelessWidget {
+  final WordDTO word;
+  final Map<String, String> flagMapping;
+
+  const WordItem({Key? key, required this.word, required this.flagMapping}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        // TODO: Implement navigation to word details screen
+        developer.log('Word tapped', name: 'WordItem', error: {'wordId': word.id});
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              word.primaryArabicScript,
+              style: const TextStyle(fontSize: 24, fontFamily: 'ArabicFont'),
+              textDirection: TextDirection.rtl,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    '(${word.partOfSpeech}) - ${word.englishTerm}',
+                    style: TextStyle(color: Colors.grey[700]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (word.dialects.isNotEmpty)
+                  SizedBox(
+                    height: 20,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: word.dialects.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 4),
+                      itemBuilder: (context, index) {
+                        final dialect = word.dialects[index];
+                        final flagAsset = flagMapping[dialect.countryCode];
+                        return flagAsset != null
+                            ? Image.asset(flagAsset, width: 20, height: 12)
+                            : Container();
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

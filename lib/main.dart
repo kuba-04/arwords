@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/profile_screen.dart';
+import 'screens/words_screen.dart';
 
 Future<void> main() async {
   try {
@@ -93,14 +94,5 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
     );
-  }
-}
-
-class WordsScreen extends StatelessWidget {
-  const WordsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Words Screen'));
   }
 }
