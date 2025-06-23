@@ -135,9 +135,6 @@ class WordsService {
           .order(sortBy)
           .range(from, to);
 
-      // Add debug log to see the response structure
-      log('Response from database: ${response.toString()}');
-
       if (response == null || response.isEmpty) {
         return WordsResponse(
           data: [],

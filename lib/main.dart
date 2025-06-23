@@ -76,8 +76,8 @@ class _MainScreenState extends State<MainScreen> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
         destinations: const <NavigationDestination>[
-          NavigationDestination(icon: Icon(Icons.home), label: 'Words'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(icon: Icon(Icons.search), label: 'Words'),
+          NavigationDestination(icon: Icon(Icons.person), label: 'Me'),
         ],
       ),
     );

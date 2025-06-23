@@ -305,8 +305,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: SingleChildScrollView(
-        child: _isAuthenticated ? _buildProfile() : _buildAuthForm(),
+      body: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: _isAuthenticated ? _buildProfile() : _buildAuthForm(),
+          ),
+        ),
       ),
     );
   }
