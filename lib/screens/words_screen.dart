@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/words_service.dart' show WordDTO, WordsService;
 import 'dart:developer' as developer;
+import 'word_details_screen.dart';
 
 // --- Main Screen Widget ---
 
@@ -175,8 +176,12 @@ class WordItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () {
-        // TODO: Implement navigation to word details screen
-        developer.log('Word tapped', name: 'WordItem', error: {'wordId': word.id});
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => WordDetailsScreen(wordId: word.id),
+          ),
+        );
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
