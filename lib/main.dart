@@ -7,24 +7,11 @@ import 'screens/words_screen.dart';
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-
-    // Add debug print to verify .env loading
-    debugPrint('Loading .env file...');
     await dotenv.load();
-    debugPrint('SUPABASE_URL: ${dotenv.env['SUPABASE_URL']}');
-    // Don't print the actual key in production!
-    debugPrint(
-      'SUPABASE_ANON_KEY exists: ${dotenv.env['SUPABASE_ANON_KEY']?.isNotEmpty}',
-    );
-
-    // Initialize Supabase
-    debugPrint('Initializing Supabase...');
     await Supabase.initialize(
       url: dotenv.env['SUPABASE_URL']!,
       anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
     );
-    debugPrint('Supabase initialized successfully');
-
     runApp(const MyApp());
   } catch (error, stackTrace) {
     debugPrint('Error in main: $error');

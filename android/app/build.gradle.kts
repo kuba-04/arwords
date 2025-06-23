@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.arwords"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973" //temporarily
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

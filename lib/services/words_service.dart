@@ -19,19 +19,12 @@ class WordDTO {
   });
 
   factory WordDTO.fromJson(Map<String, dynamic> json) {
-    // Temporarily handle the case where dialects might not be available
-    List<DialectDTO> dialectList = [];
-    if (json['dialects'] != null) {
-      var dialectsFromJson = json['dialects'] as List;
-      dialectList = dialectsFromJson.map((i) => DialectDTO.fromJson(i as Map<String, dynamic>)).toList();
-    }
-
     return WordDTO(
       id: json['id'],
       englishTerm: json['english_term'],
       primaryArabicScript: json['primary_arabic_script'],
       partOfSpeech: json['part_of_speech'],
-      dialects: dialectList,
+      dialects: [],  // Temporarily return empty list until we fix the dialect query
     );
   }
 }
@@ -41,7 +34,11 @@ class DialectDTO {
   final String countryCode;
   final String name;
 
-  DialectDTO({required this.id, required this.countryCode, required this.name});
+  DialectDTO({
+    required this.id,
+    required this.countryCode,
+    required this.name,
+  });
 
   factory DialectDTO.fromJson(Map<String, dynamic> json) {
     return DialectDTO(
@@ -108,7 +105,19 @@ class WordsService {
       // Start with the base query
       var query = supabase
           .from('words')
-          .select('*');
+          .select('''
+            *,
+            word_forms!inner (
+              *,
+              word_form_dialects!inner (
+                dialects!inner (
+                  id,
+                  name,
+                  country_code
+                )
+              )
+            )
+          ''');
 
       // Apply filters
       if (english != null && english.isNotEmpty) {
@@ -126,6 +135,9 @@ class WordsService {
           .order(sortBy)
           .range(from, to);
 
+      // Add debug log to see the response structure
+      log('Response from database: ${response.toString()}');
+
       if (response == null || response.isEmpty) {
         return WordsResponse(
           data: [],
@@ -133,14 +145,51 @@ class WordsService {
         );
       }
 
-      final words = response
-          .map((word) => WordDTO.fromJson(word as Map<String, dynamic>))
-          .toList();
+      // Transform the data to include unique dialects from word forms
+      final words = response.map((word) {
+        // Extract all dialects from word forms
+        final allDialects = (word['word_forms'] as List<dynamic>).expand((form) {
+          return ((form['word_form_dialects'] ?? []) as List<dynamic>).map((wfd) {
+            final dialect = wfd['dialects'];
+            return DialectDTO(
+              id: dialect['id'],
+              countryCode: dialect['country_code'],
+              name: dialect['name'],
+            );
+          });
+        }).toList();
+
+        // Remove duplicates based on country_code
+        final uniqueDialects = <String, DialectDTO>{};
+        for (var dialect in allDialects) {
+          uniqueDialects[dialect.countryCode] = dialect;
+        }
+
+        return WordDTO(
+          id: word['id'],
+          englishTerm: word['english_term'],
+          primaryArabicScript: word['primary_arabic_script'],
+          partOfSpeech: word['part_of_speech'],
+          dialects: uniqueDialects.values.toList(),
+        );
+      }).toList();
 
       // Get total count for pagination
       final countQuery = supabase
           .from('words')
-          .select('*');
+          .select('''
+            *,
+            word_forms!inner (
+              *,
+              word_form_dialects!inner (
+                dialects!inner (
+                  id,
+                  name,
+                  country_code
+                )
+              )
+            )
+          ''');
       
       if (english != null && english.isNotEmpty) {
         countQuery.ilike('english_term', '%$english%');

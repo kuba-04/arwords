@@ -201,21 +201,22 @@ class WordItem extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 if (word.dialects.isNotEmpty)
-                  SizedBox(
-                    height: 20,
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      scrollDirection: Axis.horizontal,
-                      itemCount: word.dialects.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 4),
-                      itemBuilder: (context, index) {
-                        final dialect = word.dialects[index];
-                        final flagAsset = flagMapping[dialect.countryCode];
-                        return flagAsset != null
-                            ? Image.asset(flagAsset, width: 20, height: 12)
-                            : Container();
-                      },
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: word.dialects.map((dialect) {
+                      final flagAsset = flagMapping[dialect.countryCode.toLowerCase()];
+                      return flagAsset != null
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: Image.asset(
+                                flagAsset,
+                                width: 20,
+                                height: 12,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Container();
+                    }).toList(),
                   ),
               ],
             ),
