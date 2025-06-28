@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../services/words_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/words_service.dart' hide WordForm;
+import '../models/word.dart';
 
 class WordDetailsScreen extends StatefulWidget {
   final String wordId;
@@ -11,9 +13,11 @@ class WordDetailsScreen extends StatefulWidget {
 }
 
 class _WordDetailsScreenState extends State<WordDetailsScreen> {
+  late final WordsService _wordsService;
+  bool _isFavorite = false;
   bool _isLoading = true;
   String? _error;
-  DetailedWordDTO? _word;
+  Word? _word;
 
   static const Map<String, String> _flagMapping = {
     'lb': 'assets/images/flags/lb.png',
@@ -24,14 +28,20 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    _wordsService = WordsService(Supabase.instance.client);
     _loadWordDetails();
   }
 
   Future<void> _loadWordDetails() async {
+    setState(() => _isLoading = true);
     try {
-      final details = await WordsService.getWordDetails(widget.wordId);
+      final isFavorite = await _wordsService.isFavorited(widget.wordId);
+      final details = await _wordsService.getWordDetails(widget.wordId);
+
       setState(() {
+        _isFavorite = isFavorite;
         _word = details;
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
@@ -39,6 +49,30 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    try {
+      if (_isFavorite) {
+        await _wordsService.removeFromFavorites(widget.wordId);
+      } else {
+        await _wordsService.addToFavorites(widget.wordId);
+      }
+      setState(() => _isFavorite = !_isFavorite);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isFavorite ? 'Added to favorites' : 'Removed from favorites',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating favorites: $e')));
     }
   }
 
@@ -50,28 +84,17 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        tag,
-        style: TextStyle(
-          fontSize: 14,
-          color: Colors.grey[600],
-        ),
-      ),
+      child: Text(tag, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
     );
   }
 
   Widget _buildDialectFlag(String dialectCode) {
     final flagAsset = _flagMapping[dialectCode.toLowerCase()];
     if (flagAsset == null) return Container();
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Image.asset(
-        flagAsset,
-        width: 20,
-        height: 12,
-        fit: BoxFit.cover,
-      ),
+      child: Image.asset(flagAsset, width: 20, height: 12, fit: BoxFit.cover),
     );
   }
 
@@ -79,9 +102,7 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
       ),
       child: Row(
         children: [
@@ -90,7 +111,7 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  form.arabicScript,
+                  form.arabicScriptVariant ?? '',
                   style: const TextStyle(
                     fontSize: 20,
                     fontFamily: 'ArabicFont',
@@ -107,13 +128,6 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
             children: [
               Text(
                 form.conjugationDetails,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              const SizedBox(width: 8),
-              _buildDialectFlag(form.dialect),
-              const SizedBox(width: 4),
-              Text(
-                form.dialect,
                 style: TextStyle(color: Colors.grey[600]),
               ),
               if (form.audioUrl != null) ...[
@@ -143,9 +157,7 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null || _word == null) {
@@ -163,107 +175,51 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_word!.englishTerm),
-      ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Text(
-                  _word!.primaryArabicScript,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontFamily: 'ArabicFont',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      '(${_word!.partOfSpeech}) - ',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    Text(
-                      _word!.englishTerm,
-                      style: const TextStyle(color: Colors.black87),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _word!.frequencyTag.replaceAll('_', ' '),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: _word!.usageRegions.map((region) => _buildDialectFlag(region)).toList(),
-                ),
-                const SizedBox(height: 24),
-
-                // Definition
-                if (_word!.englishDefinition != null && _word!.englishDefinition!.isNotEmpty) ...[
-                  const Text(
-                    'Definition',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _word!.englishDefinition!,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-
-                // Forms
-                const Text(
-                  'Forms',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: _word!.forms.map((form) => _buildWordForm(form)).toList(),
-                  ),
-                ),
-                const SizedBox(height: 80), // Bottom padding for FAB
-              ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              _isFavorite ? Icons.favorite : Icons.favorite_border,
+              color: _isFavorite ? Colors.red : null,
             ),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 24,
-            child: FloatingActionButton(
-              onPressed: () => Navigator.pop(context),
-              backgroundColor: Colors.white,
-              child: const Icon(Icons.chevron_left, color: Colors.black),
-            ),
+            onPressed: _isLoading ? null : _toggleFavorite,
           ),
         ],
       ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Text(
+              _word!.primaryArabicScript,
+              style: const TextStyle(fontSize: 32, fontFamily: 'ArabicFont'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _word!.partOfSpeech,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            if (_word!.englishDefinition != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Definition',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(_word!.englishDefinition!),
+            ],
+            const SizedBox(height: 24),
+            Text('Word Forms', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ...(_word!.wordForms.map((form) => _buildWordForm(form)).toList()),
+          ],
+        ),
+      ),
     );
   }
-} 
+}

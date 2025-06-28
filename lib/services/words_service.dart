@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart' hide Provider;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:developer';
-
+import '../models/word.dart';
 
 class WordDTO {
   final String id;
@@ -24,7 +24,8 @@ class WordDTO {
       englishTerm: json['english_term'],
       primaryArabicScript: json['primary_arabic_script'],
       partOfSpeech: json['part_of_speech'],
-      dialects: [],  // Temporarily return empty list until we fix the dialect query
+      dialects:
+          [], // Temporarily return empty list until we fix the dialect query
     );
   }
 }
@@ -34,11 +35,7 @@ class DialectDTO {
   final String countryCode;
   final String name;
 
-  DialectDTO({
-    required this.id,
-    required this.countryCode,
-    required this.name,
-  });
+  DialectDTO({required this.id, required this.countryCode, required this.name});
 
   factory DialectDTO.fromJson(Map<String, dynamic> json) {
     return DialectDTO(
@@ -57,10 +54,14 @@ class WordsResponse {
 
   factory WordsResponse.fromJson(Map<String, dynamic> json) {
     var list = json['data'] as List;
-    List<WordDTO> wordsList = list.map((i) => WordDTO.fromJson(i as Map<String, dynamic>)).toList();
+    List<WordDTO> wordsList = list
+        .map((i) => WordDTO.fromJson(i as Map<String, dynamic>))
+        .toList();
     return WordsResponse(
       data: wordsList,
-      pagination: PaginationDTO.fromJson(json['pagination'] as Map<String, dynamic>),
+      pagination: PaginationDTO.fromJson(
+        json['pagination'] as Map<String, dynamic>,
+      ),
     );
   }
 }
@@ -70,11 +71,7 @@ class PaginationDTO {
   final int limit;
   final int total;
 
-  PaginationDTO({
-    required this.page,
-    required this.limit,
-    required this.total,
-  });
+  PaginationDTO({required this.page, required this.limit, required this.total});
 
   factory PaginationDTO.fromJson(Map<String, dynamic> json) {
     return PaginationDTO(
@@ -90,11 +87,7 @@ class WordDefinition {
   final String? example;
   final String? usageNotes;
 
-  WordDefinition({
-    required this.definition,
-    this.example,
-    this.usageNotes,
-  });
+  WordDefinition({required this.definition, this.example, this.usageNotes});
 }
 
 class WordForm {
@@ -138,212 +131,149 @@ class DetailedWordDTO {
 }
 
 class WordsService {
-  static final supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
 
-  static Future<WordsResponse> getWords({
-    String? english,
-    String? arabic,
+  WordsService(this._supabase);
+
+  Future<WordsResponse> getWords({
+    required int page,
+    required int pageSize,
+    String? searchTerm,
+    List<String>? dialectIds,
     String? partOfSpeech,
-    String? frequency,
-    int page = 1,
-    int limit = 10,
-    String sortBy = 'english_term',
   }) async {
     try {
-      // Calculate pagination
-      final from = (page - 1) * limit;
-      final to = from + limit - 1;
-      
+      // Calculate offset
+      final offset = (page - 1) * pageSize;
+
       // Start with the base query
-      var query = supabase
-          .from('words')
-          .select('''
-            *,
-            word_forms!inner (
-              *,
-              word_form_dialects!inner (
-                dialects!inner (
-                  id,
-                  name,
-                  country_code
-                )
-              )
+      final query = _supabase.from('words').select('''
+          *,
+          word_forms (
+            id,
+            arabic_script_variant,
+            transliteration,
+            conjugation_details,
+            audio_url,
+            word_form_dialects (
+              dialect_id
             )
-          ''');
+          )
+        ''');
 
-      // Apply filters
-      if (english != null && english.isNotEmpty) {
-        query = query.ilike('english_term', '%$english%');
+      // Apply filters if provided
+      var filteredQuery = query;
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        filteredQuery = filteredQuery.ilike('english_term', '%$searchTerm%');
       }
-      if (arabic != null && arabic.isNotEmpty) {
-        query = query.ilike('primary_arabic_script', '%$arabic%');
-      }
+
       if (partOfSpeech != null && partOfSpeech.isNotEmpty) {
-        query = query.eq('part_of_speech', partOfSpeech);
-      }
-      
-      // Execute the query with ordering and pagination
-      final response = await query
-          .order(sortBy)
-          .range(from, to);
-
-      if (response == null || response.isEmpty) {
-        return WordsResponse(
-          data: [],
-          pagination: PaginationDTO(page: page, limit: limit, total: 0),
-        );
+        filteredQuery = filteredQuery.eq('part_of_speech', partOfSpeech);
       }
 
-      // Transform the data to include unique dialects from word forms
-      final words = response.map((word) {
-        // Extract all dialects from word forms
-        final allDialects = (word['word_forms'] as List<dynamic>).expand((form) {
-          return ((form['word_form_dialects'] ?? []) as List<dynamic>).map((wfd) {
-            final dialect = wfd['dialects'];
-            return DialectDTO(
-              id: dialect['id'],
-              countryCode: dialect['country_code'],
-              name: dialect['name'],
-            );
-          });
-        }).toList();
+      // Apply pagination
+      final paginatedQuery = filteredQuery.range(offset, offset + pageSize - 1);
 
-        // Remove duplicates based on country_code
-        final uniqueDialects = <String, DialectDTO>{};
-        for (var dialect in allDialects) {
-          uniqueDialects[dialect.countryCode] = dialect;
-        }
+      // Execute the query
+      final List<dynamic> words = await paginatedQuery;
 
-        return WordDTO(
-          id: word['id'],
-          englishTerm: word['english_term'],
-          primaryArabicScript: word['primary_arabic_script'],
-          partOfSpeech: word['part_of_speech'],
-          dialects: uniqueDialects.values.toList(),
-        );
-      }).toList();
-
-      // Get total count for pagination
-      final countQuery = supabase
-          .from('words')
-          .select('''
-            *,
-            word_forms!inner (
-              *,
-              word_form_dialects!inner (
-                dialects!inner (
-                  id,
-                  name,
-                  country_code
-                )
-              )
-            )
-          ''');
-      
-      if (english != null && english.isNotEmpty) {
-        countQuery.ilike('english_term', '%$english%');
-      }
-      if (arabic != null && arabic.isNotEmpty) {
-        countQuery.ilike('primary_arabic_script', '%$arabic%');
-      }
-      if (partOfSpeech != null && partOfSpeech.isNotEmpty) {
-        countQuery.eq('part_of_speech', partOfSpeech);
-      }
-
-      final countResponse = await countQuery;
-      final total = countResponse.length ?? 0;
+      // Get total count
+      final count = await _supabase.from('words').select().count();
 
       return WordsResponse(
-        data: words,
+        data: words.map((w) => WordDTO.fromJson(w)).toList(),
         pagination: PaginationDTO(
           page: page,
-          limit: limit,
-          total: total,
+          limit: pageSize,
+          total: count.count ?? 0,
         ),
       );
-
     } catch (error) {
       log('Error fetching words', error: error, stackTrace: StackTrace.current);
       throw Exception('Failed to fetch words: $error');
     }
   }
 
-  static Future<DetailedWordDTO> getWordDetails(String wordId) async {
-    try {
-      log('Fetching word details for ID: $wordId');
-      
-      final response = await supabase
-          .from('words')
-          .select('''
-            *,
-            word_forms (
-              id,
-              arabic_script_variant,
-              transliteration,
-              conjugation_details,
-              audio_url,
-              word_form_dialects (
-                dialects (
-                  id,
-                  name,
-                  country_code
-                )
-              )
-            )
-          ''')
-          .eq('id', wordId)
-          .single();
+  Future<Word> getWordDetails(String wordId) async {
+    final response = await _supabase
+        .from('words')
+        .select('''
+        *,
+        word_forms (
+          id,
+          arabic_script_variant,
+          transliteration,
+          conjugation_details,
+          audio_url
+        )
+      ''')
+        .eq('id', wordId)
+        .single();
 
-      log('Response received: ${response.toString()}');
-
-      if (response == null) {
-        throw Exception('Word not found');
-      }
-
-      final wordForms = (response['word_forms'] as List<dynamic>? ?? [])
-          .map((form) {
-            final dialectsList = form['word_form_dialects'] as List<dynamic>? ?? [];
-            String dialectName = 'Unknown';
-            if (dialectsList.isNotEmpty) {
-              final dialect = dialectsList.first['dialects'] as Map<String, dynamic>;
-              dialectName = dialect['name'] as String;
-            }
-            return WordForm(
-              arabicScript: form['arabic_script_variant'] ?? '',
-              transliteration: form['transliteration'] ?? '',
-              conjugationDetails: form['conjugation_details'] ?? '',
-              audioUrl: form['audio_url'],
-              dialect: dialectName,
-            );
-          })
-          .toList();
-
-      final usageRegions = (response['word_forms'] as List<dynamic>? ?? [])
-          .expand((form) {
-            final dialectsList = form['word_form_dialects'] as List<dynamic>? ?? [];
-            return dialectsList.map((wfd) => (wfd['dialects'] as Map<String, dynamic>)['country_code'] as String);
-          })
-          .toSet()
-          .toList();
-
-      final result = DetailedWordDTO(
-        id: response['id'],
-        englishTerm: response['english_term'],
-        primaryArabicScript: response['primary_arabic_script'],
-        partOfSpeech: response['part_of_speech'] ?? '',
-        englishDefinition: response['english_definition'],
-        frequencyTag: response['general_frequency_tag'] ?? 'NOT_DEFINED',
-        usageRegions: usageRegions,
-        forms: wordForms,
-        educationalNotes: [], // This field might need to be added to the database if needed
-      );
-
-      log('Transformed response into DTO: ${result.toString()}');
-      return result;
-
-    } catch (error) {
-      log('Error fetching word details', error: error, stackTrace: StackTrace.current);
-      throw Exception('Failed to fetch word details: $error');
-    }
+    return Word.fromJson(response);
   }
-} 
+
+  // Fetch user's favorite words
+  Future<List<Word>> getFavoriteWords() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    final response = await _supabase
+        .from('user_favorite_words')
+        .select('''
+        words!inner (
+          id,
+          english_term,
+          primary_arabic_script,
+          part_of_speech,
+          english_definition,
+          word_forms (
+            id,
+            arabic_script_variant,
+            transliteration,
+            conjugation_details,
+            audio_url
+          )
+        )
+      ''')
+        .eq('user_id', user.id);
+
+    return (response as List)
+        .map((item) => Word.fromJson(item['words']))
+        .toList();
+  }
+
+  // Add word to favorites
+  Future<void> addToFavorites(String wordId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    await _supabase.from('user_favorite_words').insert({
+      'user_id': user.id,
+      'word_id': wordId,
+    });
+  }
+
+  // Remove word from favorites
+  Future<void> removeFromFavorites(String wordId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    await _supabase.from('user_favorite_words').delete().match({
+      'user_id': user.id,
+      'word_id': wordId,
+    });
+  }
+
+  // Check if a word is favorited
+  Future<bool> isFavorited(String wordId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('User not authenticated');
+
+    final response = await _supabase.from('user_favorite_words').select().match(
+      {'user_id': user.id, 'word_id': wordId},
+    );
+
+    return (response as List).isNotEmpty;
+  }
+}

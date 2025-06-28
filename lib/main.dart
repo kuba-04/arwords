@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/profile_screen.dart';
 import 'screens/words_screen.dart';
+import 'screens/favorite_words_screen.dart';
+import 'screens/profile_screen.dart';
 
 Future<void> main() async {
   try {
@@ -57,28 +58,67 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  static const List<Widget> _screens = <Widget>[
-    WordsScreen(),
-    ProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Listen to auth state changes
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+      if (event == AuthChangeEvent.signedOut && _selectedIndex == 1) {
+        setState(() => _selectedIndex = 0);
+      }
+    });
+  }
+
+  List<Widget> get _screens {
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+    return [
+      const WordsScreen(),
+      if (isLoggedIn) const FavoriteWordsScreen(),
+      const ProfileScreen(),
+    ];
+  }
+
+  List<NavigationDestination> get _destinations {
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+    return [
+      const NavigationDestination(icon: Icon(Icons.book), label: 'Dictionary'),
+      if (isLoggedIn)
+        const NavigationDestination(
+          icon: Icon(Icons.favorite),
+          label: 'Favorites',
+        ),
+      const NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+    ];
+  }
 
   void _onItemTapped(int index) {
+    final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
+    // Convert the tapped index to the actual screen index
+    int actualIndex = index;
+    if (!isLoggedIn && index == 1) {
+      // If not logged in and profile is tapped (visual index 1)
+      actualIndex = _screens.length - 1; // This will be the profile screen
+    }
+
     setState(() {
-      _selectedIndex = index;
+      _selectedIndex = actualIndex;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
+        selectedIndex:
+            _selectedIndex == _screens.length - 1 &&
+                Supabase.instance.client.auth.currentUser == null
+            ? 1 // Show profile tab selected when not logged in
+            : _selectedIndex,
         onDestinationSelected: _onItemTapped,
-        destinations: const <NavigationDestination>[
-          NavigationDestination(icon: Icon(Icons.search), label: 'Words'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Me'),
-        ],
+        destinations: _destinations,
       ),
     );
   }
