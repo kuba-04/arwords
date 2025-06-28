@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <package android:name="com.kuba-04.arabicwords" />
     <application
-        android:label="arwords"
+        android:label="arabicwords"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
