@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/words_service.dart' show WordDTO, WordsService;
 import 'dart:developer' as developer;
 import 'word_details_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // --- Main Screen Widget ---
 
@@ -20,6 +21,7 @@ class _WordsScreenState extends State<WordsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   Timer? _debounceTimer;
+  late final WordsService _wordsService;
 
   // NOTE: Make sure to add flag assets to your pubspec.yaml
   // assets:
@@ -33,6 +35,7 @@ class _WordsScreenState extends State<WordsScreen> {
   @override
   void initState() {
     super.initState();
+    _wordsService = WordsService(Supabase.instance.client);
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -68,10 +71,10 @@ class _WordsScreenState extends State<WordsScreen> {
       _error = null;
     });
     try {
-      final isArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(query);
-      final response = await WordsService.getWords(
-        arabic: isArabic ? query : null,
-        english: !isArabic ? query : null,
+      final response = await _wordsService.getWords(
+        page: 1,
+        pageSize: 20,
+        searchTerm: query,
       );
       setState(() {
         _words = response.data;
@@ -102,12 +105,7 @@ class _WordsScreenState extends State<WordsScreen> {
       body: Stack(
         children: [
           _buildContent(),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _buildSearchInput(),
-          ),
+          Positioned(left: 0, right: 0, bottom: 0, child: _buildSearchInput()),
         ],
       ),
     );
@@ -118,7 +116,12 @@ class _WordsScreenState extends State<WordsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(child: Text('Error: $_error', style: const TextStyle(color: Colors.red)));
+      return Center(
+        child: Text(
+          'Error: $_error',
+          style: const TextStyle(color: Colors.red),
+        ),
+      );
     }
     if (_words.isEmpty && _searchController.text.length >= 2) {
       return const Center(child: Text('No words found'));
@@ -131,14 +134,22 @@ class _WordsScreenState extends State<WordsScreen> {
       padding: const EdgeInsets.only(bottom: 80),
       itemCount: _words.length,
       itemBuilder: (context, index) {
-        return WordItem(word: _words[_words.length - 1 - index], flagMapping: _flagMapping);
+        return WordItem(
+          word: _words[_words.length - 1 - index],
+          flagMapping: _flagMapping,
+        );
       },
     );
   }
-  
+
   Widget _buildSearchInput() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), // Adjust padding as needed
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        16,
+      ), // Adjust padding as needed
       color: Colors.white,
       child: TextField(
         controller: _searchController,
@@ -170,7 +181,8 @@ class WordItem extends StatelessWidget {
   final WordDTO word;
   final Map<String, String> flagMapping;
 
-  const WordItem({Key? key, required this.word, required this.flagMapping}) : super(key: key);
+  const WordItem({Key? key, required this.word, required this.flagMapping})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -209,10 +221,13 @@ class WordItem extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: word.dialects.map((dialect) {
-                      final flagAsset = flagMapping[dialect.countryCode.toLowerCase()];
+                      final flagAsset =
+                          flagMapping[dialect.countryCode.toLowerCase()];
                       return flagAsset != null
                           ? Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 2,
+                              ),
                               child: Image.asset(
                                 flagAsset,
                                 width: 20,

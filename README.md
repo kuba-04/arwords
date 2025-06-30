@@ -8,8 +8,7 @@ A simple app to search and learn Arabic words in Middle Eastern dialects.
 
 ## Todo
 
-- [ ] get into the store
 - [ ] ability to download dictionary locally (to research)
-- [ ] add to favourites
+- [x] add to favourites
 - [ ] recent searches
 - [ ] suggestions and rewards (to research)
