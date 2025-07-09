@@ -20,7 +20,7 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(Supabase.instance.client);
+    _wordsService = WordsService(supabase: Supabase.instance.client);
     _loadFavoriteWords();
   }
 
@@ -39,7 +39,16 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString());
+        String errorMessage;
+        if (e.toString().contains('User not authenticated')) {
+          errorMessage = 'Please sign in to access your favorite words';
+        } else if (e.toString().contains('No internet connection')) {
+          errorMessage =
+              'No internet connection. Please check your connection or download the dictionary for offline access.';
+        } else {
+          errorMessage = 'Failed to load favorite words. Please try again.';
+        }
+        setState(() => _error = errorMessage);
       }
     } finally {
       if (mounted) {
@@ -64,8 +73,24 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('ClientException') ||
+            e.toString().contains('Failed to remove from favorite')) {
+          errorMessage =
+              'Managing favorites requires an internet connection. Please check your connection and try again.';
+        } else {
+          errorMessage = 'Error removing from favorites. Please try again.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error removing from favorites: $e')),
+          SnackBar(
+            content: Text(errorMessage),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _removeFromFavorites(word),
+            ),
+          ),
         );
       }
     }

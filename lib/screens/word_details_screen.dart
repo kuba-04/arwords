@@ -28,7 +28,36 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(Supabase.instance.client);
+
+    // Initialize WordsService with Supabase client only if we can connect
+    try {
+      final supabase = Supabase.instance.client;
+      // Test the connection by trying to access the client's properties
+      final _ = supabase.auth.currentSession;
+      _wordsService = WordsService(
+        supabase: supabase,
+        onNotification: (message) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          }
+        },
+      );
+    } catch (e) {
+      // If we can't connect, initialize in offline mode
+      _wordsService = WordsService(
+        supabase: null,
+        onNotification: (message) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          }
+        },
+      );
+    }
+
     _loadWordDetails();
   }
 
@@ -70,9 +99,22 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating favorites: $e')));
+      String errorMessage;
+      if (e.toString().contains('ClientException') ||
+          e.toString().contains('Failed to remove from favorite')) {
+        errorMessage =
+            'Managing favorites requires an internet connection. Please check your connection and try again.';
+      } else {
+        errorMessage = 'Error updating favorites. Please try again.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(label: 'Retry', onPressed: _toggleFavorite),
+        ),
+      );
     }
   }
 
@@ -180,13 +222,14 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              _isFavorite ? Icons.favorite : Icons.favorite_border,
-              color: _isFavorite ? Colors.red : null,
+          if (_wordsService.isOnline) // Show only when online
+            IconButton(
+              icon: Icon(
+                _isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: _isFavorite ? Colors.red : null,
+              ),
+              onPressed: _isLoading ? null : _toggleFavorite,
             ),
-            onPressed: _isLoading ? null : _toggleFavorite,
-          ),
         ],
       ),
       body: SingleChildScrollView(

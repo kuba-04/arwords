@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/words_service.dart' show WordDTO, WordsService;
-import 'dart:developer' as developer;
 import 'word_details_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'profile_screen.dart';
 
 // --- Main Screen Widget ---
 
@@ -35,7 +35,10 @@ class _WordsScreenState extends State<WordsScreen> {
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(Supabase.instance.client);
+    _wordsService = WordsService(
+      supabase: Supabase.instance.client,
+      onNotification: _showNotification,
+    );
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -65,7 +68,6 @@ class _WordsScreenState extends State<WordsScreen> {
   }
 
   Future<void> _searchWords(String query) async {
-    developer.log('Searching words with query: "$query"');
     setState(() {
       _isLoading = true;
       _error = null;
@@ -81,7 +83,6 @@ class _WordsScreenState extends State<WordsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      developer.log('Search failed', error: e, stackTrace: StackTrace.current);
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -97,6 +98,25 @@ class _WordsScreenState extends State<WordsScreen> {
       _isLoading = false;
       _error = null;
     });
+  }
+
+  void _showNotification(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Go to Profile',
+          onPressed: () {
+            // Navigate to profile screen
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const ProfileScreen()),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override

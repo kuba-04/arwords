@@ -5,6 +5,7 @@ class Word {
   final String partOfSpeech;
   final String? englishDefinition;
   final List<WordForm> wordForms;
+  final bool isFavorite;
 
   Word({
     required this.id,
@@ -13,6 +14,7 @@ class Word {
     required this.partOfSpeech,
     this.englishDefinition,
     this.wordForms = const [],
+    this.isFavorite = false,
   });
 
   factory Word.fromJson(Map<String, dynamic> json) {
@@ -27,6 +29,7 @@ class Word {
               ?.map((e) => WordForm.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      isFavorite: json['is_favorite'] == 1 || json['is_favorite'] == true,
     );
   }
 }

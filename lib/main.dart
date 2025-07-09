@@ -57,15 +57,38 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  bool _wasLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _wasLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
     // Listen to auth state changes
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final event = data.event;
-      if (event == AuthChangeEvent.signedOut && _selectedIndex == 1) {
-        setState(() => _selectedIndex = 0);
+      final isCurrentlyLoggedIn =
+          Supabase.instance.client.auth.currentUser != null;
+
+      // Only reset tab selection when user actually logs out (not on other auth events)
+      if (event == AuthChangeEvent.signedOut && _wasLoggedIn) {
+        setState(() {
+          _selectedIndex = 0; // Go to dictionary tab
+          _wasLoggedIn = false;
+        });
+      } else if (event == AuthChangeEvent.signedIn && !_wasLoggedIn) {
+        setState(() {
+          _wasLoggedIn = true;
+        });
+      } else if (isCurrentlyLoggedIn != _wasLoggedIn) {
+        // Handle other auth state changes that affect login status
+        setState(() {
+          _wasLoggedIn = isCurrentlyLoggedIn;
+          // Only reset to dictionary tab if user logged out
+          if (!isCurrentlyLoggedIn && _selectedIndex == 1) {
+            _selectedIndex = 0;
+          }
+        });
       }
     });
   }
@@ -102,6 +125,11 @@ class _MainScreenState extends State<MainScreen> {
       actualIndex = _screens.length - 1; // This will be the profile screen
     }
 
+    // Ensure we don't select an invalid index
+    if (actualIndex >= _screens.length) {
+      actualIndex = 0; // Default to dictionary tab
+    }
+
     setState(() {
       _selectedIndex = actualIndex;
     });
@@ -109,6 +137,11 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ensure selected index is always valid
+    if (_selectedIndex >= _screens.length) {
+      _selectedIndex = 0;
+    }
+
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(

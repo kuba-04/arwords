@@ -22,10 +22,43 @@ class AuthService {
       email: email,
       password: password,
     );
+
+    if (response.user != null) {
+      // Create user profile after successful registration
+      await supabase.from('user_profiles').insert({
+        'user_id': response.user!.id,
+        'has_offline_dictionary_access': false,
+      });
+    }
+
     return response;
   }
 
   static Future<void> deleteAccount() async {
-    await supabase.rpc('delete_user');
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      await supabase.from('user_profiles').delete().eq('user_id', user.id);
+      await supabase.auth.admin.deleteUser(user.id);
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getUserProfile() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return null;
+
+    final response = await supabase
+        .from('user_profiles')
+        .select()
+        .eq('user_id', user.id)
+        .single();
+
+    return response;
+  }
+
+  static Future<void> updateUserProfile(Map<String, dynamic> updates) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) throw Exception('No authenticated user found');
+
+    await supabase.from('user_profiles').update(updates).eq('user_id', user.id);
   }
 }
