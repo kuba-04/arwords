@@ -5,6 +5,7 @@ import '../models/word.dart';
 import 'access_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'package:arwords/services/auth_service.dart';
 
 class UnauthorizedException implements Exception {
   final String message;
@@ -118,7 +119,14 @@ class OfflineStorageService {
 
   Future<Word?> getWord(String wordId) async {
     if (!await _accessManager.verifyPremiumAccess()) {
-      throw UnauthorizedException('Premium access required');
+      throw UnauthorizedException(
+        'Premium access required for offline dictionary',
+      );
+    }
+
+    final currentUserId = AuthService.supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      throw UnauthorizedException('User must be logged in');
     }
 
     final db = await database;
@@ -151,6 +159,17 @@ class OfflineStorageService {
   }
 
   Future<List<Word>> searchWords(String query) async {
+    if (!await _accessManager.verifyPremiumAccess()) {
+      throw UnauthorizedException(
+        'Premium access required for offline dictionary',
+      );
+    }
+
+    final currentUserId = AuthService.supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      throw UnauthorizedException('User must be logged in');
+    }
+
     final db = await database;
     final List<Map<String, dynamic>> words = await db.rawQuery(
       'SELECT * FROM words WHERE english_term LIKE ? OR primary_arabic_script LIKE ? ORDER BY english_term',
@@ -182,6 +201,11 @@ class OfflineStorageService {
   }
 
   Future<void> toggleFavorite(String wordId, bool isFavorite) async {
+    final currentUserId = AuthService.supabase.auth.currentUser?.id;
+    if (currentUserId == null) {
+      throw UnauthorizedException('User must be logged in');
+    }
+
     final db = await database;
     await db.update(
       'words',
@@ -189,6 +213,85 @@ class OfflineStorageService {
       where: 'id = ?',
       whereArgs: [wordId],
     );
+  }
+
+  Future<void> saveUserProfile(Map<String, dynamic> profile) async {
+    final db = await database;
+
+    // Drop the existing table to update the schema
+    await db.execute('DROP TABLE IF EXISTS user_profiles');
+
+    // Create the table with the correct schema
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id TEXT PRIMARY KEY,
+        has_offline_dictionary_access INTEGER DEFAULT 0,
+        subscription_valid_until TEXT,
+        last_synced TEXT
+      )
+    ''');
+
+    // Convert boolean to integer for SQLite and prepare data
+    final Map<String, dynamic> dbProfile = {
+      'user_id': profile['user_id'],
+      'has_offline_dictionary_access':
+          profile['has_offline_dictionary_access'] == true ? 1 : 0,
+      'subscription_valid_until': profile['subscription_valid_until'],
+      'last_synced': DateTime.now().toIso8601String(),
+    };
+
+    debugPrint('Saving profile to SQLite: $dbProfile');
+
+    // Insert or update the profile
+    await db.insert(
+      'user_profiles',
+      dbProfile,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> results = await db.query(
+        'user_profiles',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+
+      if (results.isEmpty) return null;
+
+      // Convert integer back to boolean for the app
+      final profile = Map<String, dynamic>.from(results.first);
+      profile['has_offline_dictionary_access'] =
+          profile['has_offline_dictionary_access'] == 1;
+
+      return profile;
+    } catch (e) {
+      debugPrint('Error getting user profile from local db: $e');
+      return null;
+    }
+  }
+
+  Future<void> clearUserData() async {
+    try {
+      final db = await database;
+      // Clear user profiles
+      await db.delete('user_profiles');
+      // Clear dictionary data and favorites
+      await db.delete('words');
+      await db.delete('word_forms');
+      debugPrint('Cleared all user data and dictionary from local storage');
+    } catch (e) {
+      debugPrint('Error clearing user data: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> clearUserProfiles() async {
+    final db = await database;
+    await db.delete('user_profiles');
   }
 
   Future<List<Word>> getFavoriteWords() async {

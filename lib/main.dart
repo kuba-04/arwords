@@ -4,26 +4,70 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/words_screen.dart';
 import 'screens/favorite_words_screen.dart';
 import 'screens/profile_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Load environment variables
     await dotenv.load();
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
+
+    // Validate required environment variables
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+    if (supabaseUrl == null || supabaseUrl.isEmpty) {
+      throw Exception('SUPABASE_URL environment variable is not set');
+    }
+    if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+      throw Exception('SUPABASE_ANON_KEY environment variable is not set');
+    }
+
+    // Initialize Supabase with proper error handling
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+        realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 2),
+      );
+
+      debugPrint('Supabase initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing Supabase: $e');
+      rethrow;
+    }
+
     runApp(const MyApp());
   } catch (error, stackTrace) {
-    debugPrint('Error in main: $error');
+    debugPrint('Critical error in main: $error');
     debugPrint('Stack trace: $stackTrace');
-    // Still run the app even if there's an error, but with an error message
+
+    // Run the app with an error message
     runApp(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: Center(
-            child: Text(
-              'Error initializing app. Please check your configuration.',
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Error initializing app',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

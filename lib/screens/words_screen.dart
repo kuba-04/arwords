@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/words_service.dart' show WordDTO, WordsService;
+import '../services/error_handler.dart';
 import 'word_details_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'profile_screen.dart';
@@ -83,10 +84,17 @@ class _WordsScreenState extends State<WordsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      String errorMessage;
+      if (e is NetworkException) {
+        errorMessage = e.message;
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
+      }
       setState(() {
-        _error = e.toString();
+        _error = errorMessage;
         _isLoading = false;
       });
+      _showNotification(errorMessage);
     }
   }
 
@@ -137,9 +145,26 @@ class _WordsScreenState extends State<WordsScreen> {
     }
     if (_error != null) {
       return Center(
-        child: Text(
-          'Error: $_error',
-          style: const TextStyle(color: Colors.red),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
+                  ),
+                );
+              },
+              child: const Text('Go to Profile'),
+            ),
+          ],
         ),
       );
     }

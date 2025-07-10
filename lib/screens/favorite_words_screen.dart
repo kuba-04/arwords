@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/word.dart';
 import '../services/words_service.dart';
+import '../services/error_handler.dart';
+import '../models/word.dart';
 import 'word_details_screen.dart';
 
 class FavoriteWordsScreen extends StatefulWidget {
@@ -25,35 +26,39 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
   }
 
   Future<void> _loadFavoriteWords() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
+
     try {
       final words = await _wordsService.getFavoriteWords();
-      if (mounted) {
-        setState(() {
-          _favoriteWords = words;
-          _error = null;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _favoriteWords = words;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        String errorMessage;
-        if (e.toString().contains('User not authenticated')) {
-          errorMessage = 'Please sign in to access your favorite words';
-        } else if (e.toString().contains('No internet connection')) {
-          errorMessage =
-              'No internet connection. Please check your connection or download the dictionary for offline access.';
-        } else {
-          errorMessage = 'Failed to load favorite words. Please try again.';
-        }
-        setState(() => _error = errorMessage);
+      if (!mounted) return;
+      String errorMessage;
+      if (e is NetworkException) {
+        errorMessage = e.message;
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
       }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() {
+        _error = errorMessage;
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(label: 'Retry', onPressed: _loadFavoriteWords),
+        ),
+      );
     }
   }
 

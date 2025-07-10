@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show User, Session, AuthChangeEvent, AuthException;
 import '../services/auth_service.dart';
 import '../services/download_service.dart';
 import '../services/error_handler.dart' as app_errors;
@@ -16,6 +17,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoginView = true;
   bool _loading = false;
   bool _isDownloading = false;
+  bool _isLoadingProfile = true;
   String? _error;
   User? _user;
   Map<String, dynamic>? _userProfile;
@@ -28,6 +30,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _checkUser();
+
+    // Listen to auth state changes
+    AuthService.supabase.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      final Session? session = data.session;
+
+      if (mounted) {
+        if (session != null &&
+            (event == AuthChangeEvent.signedIn ||
+                event == AuthChangeEvent.tokenRefreshed)) {
+          _checkUser();
+        } else if (event == AuthChangeEvent.signedOut) {
+          setState(() {
+            _isAuthenticated = false;
+            _user = null;
+            _userProfile = null;
+          });
+        }
+      }
+    });
   }
 
   @override
@@ -38,22 +60,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _checkUser() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingProfile = true;
+      _error = null;
+    });
+
     try {
-      final session = AuthService.supabase.auth.currentSession;
-      if (session != null) {
+      final session = await AuthService.supabase.auth.currentSession;
+      final currentUser = AuthService.supabase.auth.currentUser;
+
+      debugPrint('Session exists: ${session != null}');
+      debugPrint('Current user exists: ${currentUser != null}');
+
+      if (session != null && currentUser != null) {
         final profile = await AuthService.getUserProfile();
+        debugPrint('Profile data in _checkUser: $profile');
+        if (mounted) {
+          setState(() {
+            _isAuthenticated = true;
+            _user = currentUser;
+            _userProfile = profile;
+            _error = null;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isAuthenticated = false;
+            _user = null;
+            _userProfile = null;
+          });
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Error checking auth status: $error');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
         setState(() {
-          _isAuthenticated = true;
-          _user = session.user;
-          _userProfile = profile;
+          _isAuthenticated = false;
+          _user = null;
+          _userProfile = null;
+          _error = 'Error loading profile: $error';
         });
       }
-    } catch (error) {
-      debugPrint('Error checking auth status: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingProfile = false;
+        });
+      }
     }
   }
 
   Future<void> _handleLogin() async {
+    if (!mounted) return;
+
     try {
       setState(() {
         _loading = true;
@@ -65,22 +128,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
         password: _passwordController.text,
       );
 
+      if (!mounted) return;
+
       if (response.user == null) {
         throw Exception('No user returned from login');
       }
 
       final profile = await AuthService.getUserProfile();
+
+      if (!mounted) return;
+
       setState(() {
         _isAuthenticated = true;
         _user = response.user;
         _userProfile = profile;
+        _loading = false;
       });
     } catch (error) {
+      if (!mounted) return;
+
+      String errorMessage;
+      if (error is AuthException) {
+        // Handle Supabase auth errors with user-friendly messages
+        switch (error.message) {
+          case 'Invalid login credentials':
+            errorMessage = 'Incorrect email or password. Please try again.';
+            break;
+          case 'Email not confirmed':
+            errorMessage =
+                'Please verify your email address before logging in.';
+            break;
+          default:
+            errorMessage =
+                'Login failed. Please check your credentials and try again.';
+        }
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
+      }
+
       setState(() {
-        _error = error.toString();
-      });
-    } finally {
-      setState(() {
+        _error = errorMessage;
         _loading = false;
       });
     }
@@ -120,7 +207,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _loading = true;
       });
-      await AuthService.supabase.auth.signOut();
+      await AuthService.logout();
       setState(() {
         _isAuthenticated = false;
         _user = null;
@@ -311,6 +398,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfile() {
+    debugPrint('Building profile with data: $_userProfile');
+    debugPrint(
+      'Premium access value: ${_userProfile?['has_offline_dictionary_access']}',
+    );
+
+    if (_isLoadingProfile) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _checkUser, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -323,24 +438,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
           Text('Email: ${_user?.email}'),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text('Premium Access: '),
-              if (_userProfile != null)
+              if (_userProfile != null) ...[
                 Icon(
-                  _userProfile!['has_offline_dictionary_access']
+                  _userProfile!['has_offline_dictionary_access'] == true
                       ? Icons.check_circle
                       : Icons.cancel,
-                  color: _userProfile!['has_offline_dictionary_access']
+                  color: _userProfile!['has_offline_dictionary_access'] == true
                       ? Colors.green
                       : Colors.red,
                 ),
+                const SizedBox(width: 8),
+                Text(
+                  _userProfile!['has_offline_dictionary_access'] == true
+                      ? 'Active'
+                      : 'Inactive',
+                  style: TextStyle(
+                    color:
+                        _userProfile!['has_offline_dictionary_access'] == true
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
+              ],
             ],
           ),
           if (_userProfile?['subscription_valid_until'] != null) ...[
             const SizedBox(height: 10),
             Text(
               'Subscription Valid Until: ${DateTime.parse(_userProfile!['subscription_valid_until']).toLocal().toString().split('.')[0]}',
+              style: TextStyle(
+                color:
+                    DateTime.parse(
+                      _userProfile!['subscription_valid_until'],
+                    ).isAfter(DateTime.now())
+                    ? Colors.green
+                    : Colors.red,
+              ),
             ),
           ],
           const SizedBox(height: 20),
@@ -442,13 +579,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: Center(
-        child: SingleChildScrollView(
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Center(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400),
-            child: _isAuthenticated ? _buildProfile() : _buildAuthForm(),
+            child: SingleChildScrollView(
+              child: _isAuthenticated ? _buildProfile() : _buildAuthForm(),
+            ),
           ),
         ),
       ),

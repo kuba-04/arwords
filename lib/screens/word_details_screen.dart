@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/words_service.dart' hide WordForm;
+import '../services/error_handler.dart';
 import '../models/word.dart';
 
 class WordDetailsScreen extends StatefulWidget {
@@ -74,10 +75,25 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      String errorMessage;
+      if (e is NetworkException) {
+        errorMessage = e.message;
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
+      }
       setState(() {
-        _error = e.toString();
+        _error = errorMessage;
         _isLoading = false;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(label: 'Retry', onPressed: _loadWordDetails),
+          ),
+        );
+      }
     }
   }
 

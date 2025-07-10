@@ -18,6 +18,11 @@ class AccessManager {
 
   Future<bool> verifyPremiumAccess() async {
     try {
+      // Check if user is logged in first
+      if (AuthService.supabase.auth.currentUser == null) {
+        return false;
+      }
+
       // First try to get from local storage
       final prefs = await SharedPreferences.getInstance();
       final cachedStatus = prefs.getBool(_premiumAccessKey);
@@ -42,6 +47,11 @@ class AccessManager {
     } catch (e) {
       return false;
     }
+  }
+
+  Future<void> clearPremiumAccessCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_premiumAccessKey);
   }
 
   // TODO: Implement this

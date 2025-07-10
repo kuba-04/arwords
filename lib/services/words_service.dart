@@ -1,8 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:io' show SocketException;
 import '../models/word.dart';
 import 'access_manager.dart';
 import 'offline_storage_service.dart';
 import 'download_service.dart';
+import 'error_handler.dart';
 import 'package:flutter/foundation.dart';
 
 class WordDTO {
@@ -250,8 +252,8 @@ class WordsService {
 
       // Check if we can do online search
       if (_supabase == null) {
-        throw Exception(
-          'Cannot search: No internet connection and no offline dictionary available',
+        throw NetworkException(
+          'No internet connection available. Please check your connection or download the dictionary for offline use.',
         );
       }
 
@@ -302,6 +304,12 @@ class WordsService {
         ),
       );
     } catch (error) {
+      if (error is SocketException ||
+          error.toString().contains('ClientException')) {
+        throw NetworkException(
+          'No internet connection available. Please check your connection or download the dictionary for offline use.',
+        );
+      }
       throw Exception('Failed to fetch words: $error');
     }
   }
@@ -327,7 +335,7 @@ class WordsService {
 
       // Check if we can do online search
       if (_supabase == null) {
-        throw Exception(
+        throw NetworkException(
           'Cannot fetch word details: No internet connection and no offline dictionary available',
         );
       }
@@ -350,6 +358,12 @@ class WordsService {
 
       return Word.fromJson(response);
     } catch (error) {
+      if (error is SocketException ||
+          error.toString().contains('ClientException')) {
+        throw NetworkException(
+          'No internet connection available. Please check your connection or download the dictionary for offline use.',
+        );
+      }
       throw Exception('Failed to fetch word details: $error');
     }
   }
