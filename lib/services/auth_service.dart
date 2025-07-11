@@ -73,7 +73,6 @@ class AuthService {
       await _accessManager.clearPremiumAccessCache();
       await supabase.auth.signOut();
     } catch (e) {
-      debugPrint('Error during logout: $e');
       rethrow;
     }
   }
@@ -85,19 +84,15 @@ class AuthService {
     try {
       // First try to get from local storage
       final localProfile = await _offlineStorage.getUserProfile(user.id);
-      debugPrint('Local profile from storage: $localProfile');
 
       // If online, try to sync with server
       if (await _isOnline()) {
-        debugPrint('Online - fetching fresh profile');
         final profile = await _fetchAndSaveProfile(user.id);
-        debugPrint('Fresh profile from server: $profile');
         return profile;
       }
 
       return localProfile;
     } catch (error) {
-      debugPrint('Error getting user profile: $error');
       return null;
     }
   }
@@ -115,14 +110,11 @@ class AuthService {
     String userId,
   ) async {
     try {
-      debugPrint('Fetching profile from Supabase for user: $userId');
       final response = await supabase
           .from('user_profiles')
           .select()
           .eq('user_id', userId)
           .single();
-
-      debugPrint('Raw Supabase response: $response');
 
       if (response != null) {
         // Prepare profile data with only the fields we need
@@ -133,14 +125,11 @@ class AuthService {
           'subscription_valid_until': response['subscription_valid_until'],
         };
 
-        debugPrint('Processed profile before saving: $profile');
         await _offlineStorage.saveUserProfile(profile);
         return profile;
       }
       return null;
     } catch (e, stackTrace) {
-      debugPrint('Error fetching profile from Supabase: $e');
-      debugPrint('Stack trace: $stackTrace');
       return null;
     }
   }

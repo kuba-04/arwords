@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../models/word.dart';
 import '../services/error_handler.dart';
-import 'package:flutter/foundation.dart';
 
 class ContentDownloadService {
   static final ContentDownloadService _instance =
@@ -149,11 +148,6 @@ class ContentDownloadService {
                   );
                 }
               } catch (e) {
-                if (kDebugMode) {
-                  print(
-                    'Error processing word: ${wordData['english_term']}: $e',
-                  );
-                }
                 throw StorageException(
                   'Failed to store word in local database: $e',
                 );
@@ -177,18 +171,12 @@ class ContentDownloadService {
           );
         }
       } catch (e) {
-        if (kDebugMode) {
-          print('Error during database operations: $e');
-        }
         if (e is PostgrestException) {
           throw NetworkException('Database error: ${e.message}');
         }
         rethrow;
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Fatal error in downloadDictionary: $e');
-      }
       rethrow;
     } finally {
       if (db != null) {
@@ -230,9 +218,6 @@ class ContentDownloadService {
         'CREATE INDEX IF NOT EXISTS idx_words_primary_arabic_script ON words (primary_arabic_script)',
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error creating database tables: $e');
-      }
       throw StorageException('Failed to create local database: $e');
     }
   }

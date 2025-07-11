@@ -3,7 +3,6 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/word.dart';
 import 'access_manager.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:arwords/services/auth_service.dart';
 
@@ -37,7 +36,6 @@ class OfflineStorageService {
       _database = await _initDatabase();
       return _database!;
     } catch (e) {
-      if (kDebugMode) print('Error getting database: $e');
       _database = null;
       rethrow;
     }
@@ -51,10 +49,6 @@ class OfflineStorageService {
       // Open the existing database in read-write mode
       return await openDatabase(path);
     } catch (e, stackTrace) {
-      if (kDebugMode) {
-        print('Error initializing database: $e');
-        print('Stack trace: $stackTrace');
-      }
       rethrow;
     }
   }
@@ -81,7 +75,6 @@ class OfflineStorageService {
 
       return wordCount != null && wordCount > 0;
     } catch (e) {
-      if (kDebugMode) print('Database validation error: $e');
       return false;
     }
   }
@@ -101,7 +94,6 @@ class OfflineStorageService {
         );
       }
     } catch (e) {
-      if (kDebugMode) print('Error verifying database: $e');
       rethrow;
     }
   }
@@ -112,7 +104,6 @@ class OfflineStorageService {
       await db.delete('word_forms');
       await db.delete('words');
     } catch (e) {
-      if (kDebugMode) print('Error clearing database: $e');
       rethrow;
     }
   }
@@ -240,8 +231,6 @@ class OfflineStorageService {
       'last_synced': DateTime.now().toIso8601String(),
     };
 
-    debugPrint('Saving profile to SQLite: $dbProfile');
-
     // Insert or update the profile
     await db.insert(
       'user_profiles',
@@ -269,7 +258,6 @@ class OfflineStorageService {
 
       return profile;
     } catch (e) {
-      debugPrint('Error getting user profile from local db: $e');
       return null;
     }
   }
@@ -282,9 +270,7 @@ class OfflineStorageService {
       // Clear dictionary data and favorites
       await db.delete('words');
       await db.delete('word_forms');
-      debugPrint('Cleared all user data and dictionary from local storage');
     } catch (e) {
-      debugPrint('Error clearing user data: $e');
       rethrow;
     }
   }
