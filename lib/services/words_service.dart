@@ -149,6 +149,7 @@ class WordsService {
       _downloadService = ContentDownloadService();
 
   bool get isOnline => _supabase != null;
+  bool get isAuthenticated => _supabase?.auth.currentUser != null;
 
   Future<bool> isDictionaryDownloaded() async {
     try {
@@ -507,7 +508,8 @@ class WordsService {
       if (_supabase != null) {
         if (kDebugMode) print('isFavorited: Checking online database');
         final user = _supabase?.auth.currentUser;
-        if (user == null) throw Exception('User not authenticated');
+        // Return false if user is not authenticated instead of throwing error
+        if (user == null) return false;
 
         final response = await _supabase
             ?.from('user_favorite_words')
@@ -518,12 +520,12 @@ class WordsService {
         return (response as List).isNotEmpty;
       }
 
-      throw Exception(
-        'Cannot check favorites: No internet connection and no offline dictionary available',
-      );
+      // If neither online nor premium with downloaded dictionary, return false
+      return false;
     } catch (error) {
       if (kDebugMode) print('isFavorited ERROR: $error');
-      throw Exception('Failed to check if word is favorited: $error');
+      // Return false instead of throwing error for better user experience
+      return false;
     }
   }
 }

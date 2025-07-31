@@ -116,7 +116,9 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
       );
     } catch (e) {
       String errorMessage;
-      if (e.toString().contains('ClientException') ||
+      if (e.toString().contains('User not authenticated')) {
+        errorMessage = 'Please log in to use the favorites feature.';
+      } else if (e.toString().contains('ClientException') ||
           e.toString().contains('Failed to remove from favorite')) {
         errorMessage =
             'Managing favorites requires an internet connection. Please check your connection and try again.';
@@ -238,7 +240,9 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          if (_wordsService.isOnline) // Show only when online
+          if (_wordsService.isOnline &&
+              _wordsService
+                  .isAuthenticated) // Show only when online and authenticated
             IconButton(
               icon: Icon(
                 _isFavorite ? Icons.favorite : Icons.favorite_border,
