@@ -68,9 +68,14 @@ class AuthService {
 
   static Future<void> logout() async {
     try {
-      // Always clear local data first
-      await _offlineStorage.clearUserData();
+      // Clear premium access cache first to prevent race conditions
       await _accessManager.clearPremiumAccessCache();
+
+      // Then clear SQLite data
+      await _offlineStorage.clearUserData();
+
+      // Finally clear user profiles from SQLite
+      await _offlineStorage.clearUserProfiles();
     } catch (e) {
       // Log error but continue with logout
       debugPrint('Error clearing local data during logout: $e');

@@ -46,8 +46,26 @@ class OfflineStorageService {
       final documentsDirectory = await getApplicationDocumentsDirectory();
       String path = join(documentsDirectory.path, 'arwords.db');
 
-      // Open the existing database in read-write mode
-      return await openDatabase(path);
+      // Open the database with proper initialization
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          // Tables will be created by the download service
+        },
+        onOpen: (db) async {
+          // Verify tables exist
+          final tables = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND (name='words' OR name='word_forms')",
+          );
+
+          if (tables.length != 2) {
+            throw Exception(
+              'Database schema not initialized. Please download dictionary first.',
+            );
+          }
+        },
+      );
     } catch (e, stackTrace) {
       rethrow;
     }

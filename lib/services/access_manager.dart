@@ -1,9 +1,11 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
+import 'offline_storage_service.dart';
 
 class AccessManager {
   static final AccessManager _instance = AccessManager._internal();
   static const String _premiumAccessKey = 'has_offline_dictionary_access';
+  final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   factory AccessManager() {
     return _instance;
@@ -19,14 +21,24 @@ class AccessManager {
   Future<bool> verifyPremiumAccess() async {
     try {
       // Check if user is logged in first
-      if (AuthService.supabase.auth.currentUser == null) {
+      final user = AuthService.supabase.auth.currentUser;
+      if (user == null) {
         return false;
       }
 
-      // First try to get from local storage
+      // First check SQLite database (most authoritative local source)
+      final sqliteProfile = await _offlineStorage.getUserProfile(user.id);
+      if (sqliteProfile != null) {
+        final sqliteStatus =
+            sqliteProfile['has_offline_dictionary_access'] ?? false;
+        // Update SharedPreferences to match SQLite
+        await cachePremiumStatus(sqliteStatus);
+        return sqliteStatus;
+      }
+
+      // If no SQLite data, check SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final cachedStatus = prefs.getBool(_premiumAccessKey);
-
       if (cachedStatus != null) {
         return cachedStatus;
       }
@@ -36,8 +48,11 @@ class AccessManager {
         final profile = await AuthService.getUserProfile();
         final hasPremiumAccess = profile?[_premiumAccessKey] ?? false;
 
-        // Cache the result for offline use
+        // Cache the result for offline use in both places
         await cachePremiumStatus(hasPremiumAccess);
+        if (profile != null) {
+          await _offlineStorage.saveUserProfile(profile);
+        }
 
         return hasPremiumAccess;
       } catch (e) {
