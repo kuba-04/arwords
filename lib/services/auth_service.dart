@@ -42,7 +42,6 @@ class AuthService {
       final now = DateTime.now().toIso8601String();
       final profile = {
         'user_id': response.user!.id,
-        'email': email,
         'has_offline_dictionary_access': false,
         'subscription_valid_until': null,
         'created_at': now,
@@ -69,11 +68,20 @@ class AuthService {
 
   static Future<void> logout() async {
     try {
+      // Always clear local data first
       await _offlineStorage.clearUserData();
       await _accessManager.clearPremiumAccessCache();
+    } catch (e) {
+      // Log error but continue with logout
+      debugPrint('Error clearing local data during logout: $e');
+    }
+
+    try {
+      // Try to sign out from Supabase, but don't fail if it errors
       await supabase.auth.signOut();
     } catch (e) {
-      rethrow;
+      // Log error but don't fail the logout
+      debugPrint('Error signing out from Supabase: $e');
     }
   }
 
