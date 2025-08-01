@@ -2,8 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/word.dart';
-import 'access_manager.dart';
-import 'dart:io';
 import 'package:arwords/services/auth_service.dart';
 
 class UnauthorizedException implements Exception {
@@ -14,9 +12,8 @@ class UnauthorizedException implements Exception {
 class OfflineStorageService {
   static OfflineStorageService? _instance;
   static Database? _database;
-  final AccessManager _accessManager;
 
-  OfflineStorageService._() : _accessManager = AccessManager();
+  OfflineStorageService._();
 
   factory OfflineStorageService() {
     _instance ??= OfflineStorageService._();
@@ -66,7 +63,7 @@ class OfflineStorageService {
           }
         },
       );
-    } catch (e, stackTrace) {
+    } catch (e) {
       rethrow;
     }
   }
@@ -127,12 +124,6 @@ class OfflineStorageService {
   }
 
   Future<Word?> getWord(String wordId) async {
-    if (!await _accessManager.verifyPremiumAccess()) {
-      throw UnauthorizedException(
-        'Premium access required for offline dictionary',
-      );
-    }
-
     final currentUserId = AuthService.supabase.auth.currentUser?.id;
     if (currentUserId == null) {
       throw UnauthorizedException('User must be logged in');
@@ -168,12 +159,6 @@ class OfflineStorageService {
   }
 
   Future<List<Word>> searchWords(String query) async {
-    if (!await _accessManager.verifyPremiumAccess()) {
-      throw UnauthorizedException(
-        'Premium access required for offline dictionary',
-      );
-    }
-
     final currentUserId = AuthService.supabase.auth.currentUser?.id;
     if (currentUserId == null) {
       throw UnauthorizedException('User must be logged in');

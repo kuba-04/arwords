@@ -5,7 +5,7 @@ import 'offline_storage_service.dart';
 class AccessManager {
   static final AccessManager _instance = AccessManager._internal();
   static const String _premiumAccessKey = 'has_offline_dictionary_access';
-  final OfflineStorageService _offlineStorage = OfflineStorageService();
+  OfflineStorageService? _offlineStorage;
 
   factory AccessManager() {
     return _instance;
@@ -27,7 +27,8 @@ class AccessManager {
       }
 
       // First check SQLite database (most authoritative local source)
-      final sqliteProfile = await _offlineStorage.getUserProfile(user.id);
+      _offlineStorage ??= OfflineStorageService();
+      final sqliteProfile = await _offlineStorage!.getUserProfile(user.id);
       if (sqliteProfile != null) {
         final sqliteStatus =
             sqliteProfile['has_offline_dictionary_access'] ?? false;
@@ -51,7 +52,8 @@ class AccessManager {
         // Cache the result for offline use in both places
         await cachePremiumStatus(hasPremiumAccess);
         if (profile != null) {
-          await _offlineStorage.saveUserProfile(profile);
+          _offlineStorage ??= OfflineStorageService();
+          await _offlineStorage!.saveUserProfile(profile);
         }
 
         return hasPremiumAccess;
