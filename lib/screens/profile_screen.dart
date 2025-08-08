@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show User, Session, AuthChangeEvent, AuthException;
+import '../models/purchase_update.dart';
 import '../services/auth_service.dart';
 import '../services/download_service.dart';
 import '../services/error_handler.dart' as app_errors;
+import '../services/purchase_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,10 +21,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _loading = false;
   bool _isDownloading = false;
   bool _isLoadingProfile = true;
+  bool _isPurchasing = false;
   String? _error;
   User? _user;
   Map<String, dynamic>? _userProfile;
-  final _downloadService = ContentDownloadService();
+  late final ContentDownloadService _downloadService;
+  late final PurchaseService _purchaseService;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,7 +34,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _downloadService = ContentDownloadService();
+    _purchaseService = PurchaseService();
     _checkUser();
+    _initializePurchases();
 
     // Listen to auth state changes
     AuthService.supabase.auth.onAuthStateChange.listen((data) {
@@ -52,10 +60,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Future<void> _initializePurchases() async {
+    try {
+      await _purchaseService.initialize();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to initialize in-app purchases: $e';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _purchaseService.dispose();
+    _purchaseSubscription.cancel();
     super.dispose();
   }
 
@@ -273,6 +295,126 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       },
     );
+  }
+
+  late StreamSubscription<PurchaseUpdate> _purchaseSubscription;
+
+  Future<void> _handlePurchase() async {
+    await _processPurchaseAction(() => _purchaseService.buyPremiumAccess());
+  }
+
+  Future<void> _handleRestorePurchases() async {
+    await _processPurchaseAction(() => _purchaseService.restorePurchases());
+  }
+
+  Future<void> _processPurchaseAction(Future<void> Function() action) async {
+    try {
+      setState(() {
+        _isPurchasing = true;
+        _error = null;
+      });
+
+      // Subscribe to purchase updates
+      // Cancel any previous subscription to avoid duplicate listeners
+      try {
+        await _purchaseSubscription.cancel();
+      } catch (_) {}
+
+      bool completed = false;
+      _purchaseSubscription = _purchaseService.purchaseUpdates.listen(
+        (update) {
+          // Handle purchase updates
+          if (update.status == PurchaseUpdateStatus.pending) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(update.message),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          } else if (update.status == PurchaseUpdateStatus.purchased) {
+            completed = true;
+            setState(() {
+              _isPurchasing = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(update.message),
+                backgroundColor: Colors.green,
+              ),
+            );
+            // Refresh user profile to show new purchase status
+            _checkUser();
+          } else if (update.status == PurchaseUpdateStatus.error) {
+            completed = true;
+            setState(() {
+              _isPurchasing = false;
+              _error = update.message;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(update.message),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: () => _processPurchaseAction(action),
+                ),
+              ),
+            );
+          }
+        },
+        onError: (error) {
+          if (!mounted) return;
+          setState(() {
+            _isPurchasing = false;
+            _error = 'Purchase error: $error';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Purchase error: $error'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+      );
+
+      // Safety timeout in case no events are received (e.g., billing UI failed to open)
+      Future.delayed(const Duration(seconds: 30), () {
+        if (!mounted || completed) return;
+        setState(() {
+          _isPurchasing = false;
+          _error = 'Purchase timed out. Please try again.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Purchase timed out. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      });
+
+      await action();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isPurchasing = false;
+        _error = 'Failed to process purchase action: $e';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Action failed: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _processPurchaseAction(action),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _handleDownloadDictionary() async {
@@ -537,6 +679,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Text(
                     'Get offline access to the entire dictionary! Purchase premium to download words and use them without internet connection.',
                     style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isPurchasing ? null : _handlePurchase,
+                          icon: _isPurchasing
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.shopping_cart),
+                          label: Text(
+                            _isPurchasing
+                                ? 'Processing...'
+                                : 'Purchase Premium Access',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: _isPurchasing
+                              ? null
+                              : _handleRestorePurchases,
+                          child: const Text('Restore Purchases'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
