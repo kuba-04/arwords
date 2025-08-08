@@ -77,7 +77,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _purchaseService.dispose();
-    _purchaseSubscription.cancel();
+    _purchaseSubscription?.cancel();
     super.dispose();
   }
 
@@ -297,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  late StreamSubscription<PurchaseUpdate> _purchaseSubscription;
+  StreamSubscription<PurchaseUpdate>? _purchaseSubscription;
 
   Future<void> _handlePurchase() async {
     await _processPurchaseAction(() => _purchaseService.buyPremiumAccess());
@@ -317,7 +317,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Subscribe to purchase updates
       // Cancel any previous subscription to avoid duplicate listeners
       try {
-        await _purchaseSubscription.cancel();
+        await _purchaseSubscription?.cancel();
       } catch (_) {}
 
       bool completed = false;

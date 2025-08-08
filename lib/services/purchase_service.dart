@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:in_app_purchase/in_app_purchase.dart' as iap;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,8 +15,7 @@ class PurchaseService {
   late StreamSubscription<List<iap.PurchaseDetails>> _subscription;
   List<iap.ProductDetails> products = [];
   String? lastError;
-  bool _verificationEnabled = false; // Temporarily disabled
-
+  bool _verificationEnabled = true;
   // Stream controllers for purchase updates
   final _purchaseController = StreamController<PurchaseUpdate>.broadcast();
   Stream<PurchaseUpdate> get purchaseUpdates => _purchaseController.stream;
@@ -45,15 +43,18 @@ class PurchaseService {
         try {
           await Future.any([
             _iap.isAvailable(),
-            Future.delayed(const Duration(seconds: 5), () {
+            Future.delayed(const Duration(seconds: 10), () {
               throw TimeoutException(
                 'Google Play Billing connection timed out',
+                const Duration(seconds: 10),
               );
             }),
           ]);
           print('Google Play Billing connection successful');
         } catch (e) {
           print('Google Play Billing connection error: $e');
+          // Continue with initialization even if this check fails
+          // as the main isAvailable() call might still work
         }
       }
       if (!available) {
@@ -83,7 +84,6 @@ class PurchaseService {
       lastError = null;
 
       // Initialize RevenueCat verifier for all platforms
-      /* Temporarily disabled RevenueCat integration
       try {
         await dotenv.load();
         final revenueCatApiKey = dotenv.env['REVENUECAT_API_KEY'];
@@ -99,7 +99,6 @@ class PurchaseService {
         print('RevenueCat initialization failed: $e');
         _verificationEnabled = false;
       }
-      */
     } catch (e) {
       print('Error initializing IAP: $e');
       lastError = 'Failed to initialize in-app purchases: $e';
@@ -124,14 +123,30 @@ class PurchaseService {
       const ids = <String>{_premiumProductId};
       print('Product IDs to query: $ids');
       print('Awaiting product details response...');
-      final response = await Future.any([
-        _iap.queryProductDetails(ids),
-        Future.delayed(const Duration(seconds: 10), () {
-          throw TimeoutException(
-            'Product details query timed out after 10 seconds',
-          );
-        }),
-      ]);
+
+      late iap.ProductDetailsResponse response;
+      try {
+        response = await Future.any([
+          _iap.queryProductDetails(ids),
+          Future.delayed(const Duration(seconds: 15), () {
+            throw TimeoutException(
+              'Product details query timed out after 15 seconds. This might be due to Google Play Billing connectivity issues.',
+              const Duration(seconds: 15),
+            );
+          }),
+        ]);
+      } on TimeoutException catch (e) {
+        print('Timeout occurred: ${e.message}');
+        _purchaseController.add(
+          PurchaseUpdate(
+            status: PurchaseUpdateStatus.error,
+            message:
+                'Connection to store timed out. Please check your internet connection and try again.',
+            error: e,
+          ),
+        );
+        return;
+      }
       print('Product details response received:');
       print('- Product count: ${response.productDetails.length}');
       print('- Not found products: ${response.notFoundIDs}');
@@ -338,8 +353,6 @@ class PurchaseService {
         return false;
       }
 
-      // RevenueCat verification temporarily disabled, using only native store verification
-      /* Temporarily disabled RevenueCat verification
       // If RevenueCat verification is disabled, trust the store purchase
       if (!_verificationEnabled) {
         print('RevenueCat verification disabled, trusting store purchase');
@@ -364,7 +377,6 @@ class PurchaseService {
         );
         return false;
       }
-      */
 
       print('Purchase verified with native store');
       return true;
