@@ -251,7 +251,9 @@ class PurchaseService {
       );
 
       // Note: Past purchases will be handled via the purchase stream when restorePurchases() is called
-      AppLogger.purchase('Restoring purchases to handle any existing purchases...');
+      AppLogger.purchase(
+        'Restoring purchases to handle any existing purchases...',
+      );
 
       await _iap.restorePurchases();
     } catch (e) {
@@ -293,18 +295,21 @@ class PurchaseService {
           case iap.PurchaseStatus.purchased:
           case iap.PurchaseStatus.restored:
             // For restored purchases of consumables on Android, consume them to allow re-purchasing
-            if (purchaseDetails.status == iap.PurchaseStatus.restored && 
-                purchaseDetails.productID == _premiumProductId && 
+            if (purchaseDetails.status == iap.PurchaseStatus.restored &&
+                purchaseDetails.productID == _premiumProductId &&
                 Platform.isAndroid) {
               AppLogger.purchase(
-                'Found restored consumable purchase, consuming it to allow re-purchasing...'
+                'Found restored consumable purchase, consuming it to allow re-purchasing...',
               );
               try {
                 final InAppPurchaseAndroidPlatformAddition androidAddition =
-                    _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+                    _iap
+                        .getPlatformAddition<
+                          InAppPurchaseAndroidPlatformAddition
+                        >();
                 await androidAddition.consumePurchase(purchaseDetails);
                 AppLogger.purchase('Successfully consumed restored purchase');
-                
+
                 // Complete the purchase and skip further processing since this is just cleanup
                 if (purchaseDetails.pendingCompletePurchase) {
                   await _iap.completePurchase(purchaseDetails);
@@ -444,12 +449,12 @@ class PurchaseService {
     // First consume the purchase (for consumable products)
     if (purchaseDetails.productID == _premiumProductId) {
       AppLogger.purchase('🔄 Consuming purchase to allow future purchases...');
-      
+
       // For Android, explicitly consume the purchase to allow re-purchasing
       if (Platform.isAndroid) {
         try {
-          final InAppPurchaseAndroidPlatformAddition androidAddition =
-              _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+          final InAppPurchaseAndroidPlatformAddition androidAddition = _iap
+              .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
           await androidAddition.consumePurchase(purchaseDetails);
           AppLogger.purchase('✅ Purchase consumed successfully');
         } catch (e) {
@@ -571,22 +576,20 @@ class PurchaseService {
     }
   }
 
-
-
   Future<void> _consumeExistingPurchasesViaRestore() async {
     try {
       AppLogger.purchase('Consuming existing purchases via restore...');
-      
+
       // For Android, we can also check if any consumables need to be consumed
       if (Platform.isAndroid) {
         // Trigger a restore which will call our purchase stream listener
         // where we'll handle consumption of any existing purchases
         await _iap.restorePurchases();
-        
+
         // Give a small delay to allow the purchase stream to process
         await Future.delayed(const Duration(milliseconds: 500));
       }
-      
+
       AppLogger.purchase('Existing purchases check completed');
     } catch (e) {
       AppLogger.purchase(
