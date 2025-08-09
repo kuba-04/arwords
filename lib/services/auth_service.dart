@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'offline_storage_service.dart';
 import 'access_manager.dart';
-import 'package:flutter/foundation.dart';
+import 'logger_service.dart';
 
 class AuthService {
   static final supabase = Supabase.instance.client;
@@ -78,7 +78,11 @@ class AuthService {
       await _offlineStorage.clearUserProfiles();
     } catch (e) {
       // Log error but continue with logout
-      debugPrint('Error clearing local data during logout: $e');
+      AppLogger.auth(
+        'Error clearing local data during logout',
+        level: 'warning',
+        error: e,
+      );
     }
 
     try {
@@ -86,36 +90,40 @@ class AuthService {
       await supabase.auth.signOut();
     } catch (e) {
       // Log error but don't fail the logout
-      debugPrint('Error signing out from Supabase: $e');
+      AppLogger.auth(
+        'Error signing out from Supabase',
+        level: 'warning',
+        error: e,
+      );
     }
   }
 
   static Future<Map<String, dynamic>?> getUserProfile() async {
-    print('AUTH SERVICE: getUserProfile called ----'); // More visible log
     final user = supabase.auth.currentUser;
     if (user == null) {
-      print('AUTH SERVICE: No current user found ----'); // More visible log
+      AppLogger.auth('No current user found');
       return null;
     }
 
     try {
       // First try to get from local storage
       final localProfile = await _offlineStorage.getUserProfile(user.id);
-      debugPrint('getUserProfile: Local profile: $localProfile');
-
+     
       // If online, try to sync with server
       if (await _isOnline()) {
-        debugPrint('getUserProfile: Online, fetching from server');
         final profile = await _fetchAndSaveProfile(user.id);
-        debugPrint('getUserProfile: Server profile: $profile');
         return profile;
       } else {
-        debugPrint('getUserProfile: Offline, using local profile');
+        AppLogger.auth('Offline, using local profile');
       }
 
       return localProfile;
     } catch (error) {
-      debugPrint('getUserProfile: Error: $error');
+      AppLogger.auth(
+        'Error getting user profile',
+        level: 'error',
+        error: error,
+      );
       return null;
     }
   }
@@ -133,16 +141,12 @@ class AuthService {
     String userId,
   ) async {
     try {
-      print(
-        'AUTH SERVICE: Fetching profile for user $userId ----',
-      ); // More visible log
       final response = await supabase
           .from('user_profiles')
           .select()
           .eq('user_id', userId)
           .single();
 
-      debugPrint('_fetchAndSaveProfile: Raw response: $response');
       if (response.isNotEmpty) {
         // Prepare profile data with only the fields we need
         final Map<String, dynamic> profile = {
@@ -152,14 +156,16 @@ class AuthService {
           'subscription_valid_until': response['subscription_valid_until'],
         };
 
-        debugPrint('_fetchAndSaveProfile: Saving profile: $profile');
         await _offlineStorage.saveUserProfile(profile);
         return profile;
       }
-      debugPrint('_fetchAndSaveProfile: Response was empty');
       return null;
     } catch (e) {
-      debugPrint('_fetchAndSaveProfile: Error: $e');
+      AppLogger.auth(
+        'Error fetching and saving profile',
+        level: 'error',
+        error: e,
+      );
       return null;
     }
   }

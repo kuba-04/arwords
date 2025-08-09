@@ -5,7 +5,7 @@ import 'access_manager.dart';
 import 'offline_storage_service.dart';
 import 'download_service.dart';
 import 'error_handler.dart';
-import 'package:flutter/foundation.dart';
+import 'logger_service.dart';
 
 class WordDTO {
   final String id;
@@ -170,7 +170,15 @@ class WordsService {
     try {
       _isDownloading = true;
       final isPremium = await _accessManager.verifyPremiumAccess();
+      AppLogger.words(
+        'Premium access check result: $isPremium',
+        level: 'debug',
+      );
       if (!isPremium) {
+        AppLogger.words(
+          'Premium access required for dictionary download',
+          level: 'error',
+        );
         throw Exception('Premium access required for dictionary download');
       }
 
@@ -188,10 +196,12 @@ class WordsService {
 
       // Cache premium status for offline use
       await _accessManager.cachePremiumStatus(true);
+      AppLogger.words('Premium status cached', level: 'debug');
 
       if (onNotification != null) {
         onNotification!('Dictionary downloaded successfully');
       }
+      AppLogger.words('Dictionary download process completed successfully');
     } catch (e) {
       if (onNotification != null) {
         onNotification!('Failed to download dictionary: $e');
@@ -449,7 +459,11 @@ class WordsService {
         }
       }
     } catch (error) {
-      if (kDebugMode) print('Error adding to favorites: $error');
+      AppLogger.words(
+        'Error adding to favorites',
+        level: 'error',
+        error: error,
+      );
       throw Exception('Failed to add to favorites: $error');
     }
   }
@@ -483,30 +497,23 @@ class WordsService {
   // Check if a word is favorited
   Future<bool> isFavorited(String wordId) async {
     try {
-      if (kDebugMode) print('isFavorited: Starting check for wordId: $wordId');
+      AppLogger.words(
+        'Starting isFavorited check for wordId: $wordId',
+        level: 'debug',
+      );
 
       final isPremium = await _accessManager.verifyPremiumAccess();
       final isDownloaded = await isDictionaryDownloaded();
 
-      if (kDebugMode)
-        print(
-          'isFavorited: isPremium: $isPremium, isDownloaded: $isDownloaded',
-        );
-
+      
       // For premium users with downloaded dictionary, check offline storage
       if (isPremium && isDownloaded) {
-        if (kDebugMode) print('isFavorited: Checking offline storage');
         final word = await _offlineStorage.getWord(wordId);
-        if (kDebugMode)
-          print(
-            'isFavorited: Word from offline storage: ${word?.id}, isFavorite: ${word?.isFavorite}',
-          );
         return word?.isFavorite ?? false;
       }
 
       // If online, check remote database
       if (_supabase != null) {
-        if (kDebugMode) print('isFavorited: Checking online database');
         final user = _supabase?.auth.currentUser;
         // Return false if user is not authenticated instead of throwing error
         if (user == null) return false;
@@ -515,15 +522,17 @@ class WordsService {
             ?.from('user_favorite_words')
             .select()
             .match({'user_id': user.id, 'word_id': wordId});
-
-        if (kDebugMode) print('isFavorited: Online response: $response');
         return (response as List).isNotEmpty;
       }
 
       // If neither online nor premium with downloaded dictionary, return false
       return false;
     } catch (error) {
-      if (kDebugMode) print('isFavorited ERROR: $error');
+      AppLogger.words(
+        'Error checking isFavorited',
+        level: 'error',
+        error: error,
+      );
       // Return false instead of throwing error for better user experience
       return false;
     }

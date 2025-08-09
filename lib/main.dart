@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/words_screen.dart';
 import 'screens/favorite_words_screen.dart';
 import 'screens/profile_screen.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'services/logger_service.dart';
 
 Future<void> main() async {
   try {
@@ -33,16 +33,14 @@ Future<void> main() async {
         realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 2),
       );
 
-      debugPrint('Supabase initialized successfully');
     } catch (e) {
-      debugPrint('Error initializing Supabase: $e');
+      AppLogger.error('Error initializing Supabase', e);
       rethrow;
     }
 
     runApp(const MyApp());
   } catch (error, stackTrace) {
-    debugPrint('Critical error in main: $error');
-    debugPrint('Stack trace: $stackTrace');
+    AppLogger.fatal('Critical error in main', error, stackTrace);
 
     // Run the app with an error message
     runApp(

@@ -1,9 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import '../models/word.dart';
 import 'package:arwords/services/auth_service.dart';
+import 'logger_service.dart';
 
 class UnauthorizedException implements Exception {
   final String message;
@@ -216,7 +216,7 @@ class OfflineStorageService {
     // Check if table exists and create if needed
     final tableExists = await isUserProfileTableValid();
     if (!tableExists) {
-      debugPrint('Creating user_profiles table');
+      AppLogger.storage('Creating user_profiles table', level: 'debug');
       await db.execute('''
         CREATE TABLE IF NOT EXISTS user_profiles (
           user_id TEXT PRIMARY KEY,
@@ -251,7 +251,7 @@ class OfflineStorageService {
       // Check if table exists first
       final tableExists = await isUserProfileTableValid();
       if (!tableExists) {
-        debugPrint('User profiles table does not exist');
+        AppLogger.storage('User profiles table does not exist', level: 'debug');
         return null;
       }
 
@@ -270,7 +270,7 @@ class OfflineStorageService {
 
       return profile;
     } catch (e) {
-      debugPrint('Error getting user profile: $e');
+      AppLogger.storage('Error getting user profile', level: 'error', error: e);
       return null;
     }
   }

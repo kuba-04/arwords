@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/download_service.dart';
 import '../services/error_handler.dart' as app_errors;
 import '../services/purchase_service.dart';
+import '../services/logger_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -93,12 +94,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final session = await AuthService.supabase.auth.currentSession;
       final currentUser = AuthService.supabase.auth.currentUser;
 
-      debugPrint('Session exists: ${session != null}');
-      debugPrint('Current user exists: ${currentUser != null}');
+      AppLogger.profile('Session exists: ${session != null}', level: 'debug');
+      AppLogger.profile(
+        'Current user exists: ${currentUser != null}',
+        level: 'debug',
+      );
 
       if (session != null && currentUser != null) {
         final profile = await AuthService.getUserProfile();
-        debugPrint('Profile data in _checkUser: $profile');
+        AppLogger.profile(
+          'Profile data retrieved in _checkUser',
+          level: 'debug',
+        );
         if (mounted) {
           setState(() {
             _isAuthenticated = true;
@@ -117,8 +124,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (error, stackTrace) {
-      debugPrint('Error checking auth status: $error');
-      debugPrint('Stack trace: $stackTrace');
+      AppLogger.profile(
+        'Error checking auth status',
+        level: 'error',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
         setState(() {
           _isAuthenticated = false;
@@ -343,11 +354,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
             // Refresh user profile to show new purchase status
-            print('Purchase successful, refreshing user profile...');
+            AppLogger.profile(
+              'Purchase successful, refreshing user profile...',
+            );
             // Add a small delay to ensure Supabase update propagates
             Future.delayed(const Duration(milliseconds: 1000), () {
               if (mounted) {
-                print('Delayed refresh executing...');
+                AppLogger.profile(
+                  'Delayed refresh executing...',
+                  level: 'debug',
+                );
                 _checkUser();
               }
             });
@@ -430,49 +446,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isDownloading = true;
         _error = null;
       });
-      await _downloadService
-          .downloadDictionary()
-          .then(
-            (_) => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Dictionary downloaded successfully!'),
-              ),
-            ),
-          )
-          .catchError((error) {
-            String errorMessage = 'Failed to download dictionary';
-            if (error is app_errors.NetworkException) {
-              errorMessage =
-                  'Network error: Please check your internet connection';
-            } else if (error is app_errors.StorageException) {
-              errorMessage = 'Storage error: Not enough space on your device';
-            }
-            setState(() {
-              _error = errorMessage;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(errorMessage),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 5),
-                action: SnackBarAction(
-                  label: 'Retry',
-                  textColor: Colors.white,
-                  onPressed: _handleDownloadDictionary,
-                ),
-              ),
-            );
-            throw error; // Re-throw to be caught by the outer catch
-          });
+
+      await _downloadService.downloadDictionary();
+
+      AppLogger.profile(
+        'Dictionary download completed, showing success message',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dictionary downloaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (error) {
-      // This catch block will handle any other unexpected errors
-      setState(() {
-        _isDownloading = false;
-      });
+      AppLogger.profile(
+        'Dictionary download failed',
+        level: 'error',
+        error: error,
+      );
+
+      String errorMessage = 'Failed to download dictionary';
+      if (error is app_errors.NetworkException) {
+        errorMessage = 'Network error: Please check your internet connection';
+      } else if (error is app_errors.StorageException) {
+        errorMessage = 'Storage error: Not enough space on your device';
+      }
+
+      if (mounted) {
+        setState(() {
+          _error = errorMessage;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _handleDownloadDictionary,
+            ),
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isDownloading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+        });
+      }
     }
   }
 
@@ -547,16 +571,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfile() {
-    print('PROFILE BUILD START ----'); // This is a more visible log
-    debugPrint('Building profile with data: $_userProfile');
-    debugPrint(
-      'Premium access value: ${_userProfile?['has_offline_dictionary_access']}',
-    );
-
     final hasPremiumAccess =
         _userProfile?['has_offline_dictionary_access'] == true;
-    debugPrint('Computed hasPremiumAccess: $hasPremiumAccess');
-
+    
     if (_isLoadingProfile) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -596,7 +613,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: _isLoadingProfile
                     ? null
                     : () {
-                        print('Manual refresh triggered');
+                        AppLogger.profile('Manual refresh triggered');
                         _checkUser();
                       },
                 icon: _isLoadingProfile
