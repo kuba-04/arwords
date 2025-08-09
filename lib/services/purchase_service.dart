@@ -11,7 +11,7 @@ import 'logger_service.dart';
 import '../models/purchase_update.dart';
 
 class PurchaseService {
-  static const String _premiumProductId = 'premium_acc';
+  static const String _premiumProductId = 'premium_access';
   final _iap = iap.InAppPurchase.instance;
   late final RevenueCatVerifier _revenueCatVerifier;
   late StreamSubscription<List<iap.PurchaseDetails>> _subscription;
