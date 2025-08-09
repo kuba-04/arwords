@@ -36,6 +36,7 @@ dependencies:
   supabase_flutter: ^2.0.0
   flutter_dotenv: ^5.0.2
   in_app_purchase: ^3.2.3
+  in_app_purchase_android: ^0.4.0+3
   shared_preferences: ^2.2.0
   hive_flutter: ^1.1.0
   dio: ^5.0.0
