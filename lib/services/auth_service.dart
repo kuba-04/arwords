@@ -91,29 +91,39 @@ class AuthService {
   }
 
   static Future<Map<String, dynamic>?> getUserProfile() async {
+    print('AUTH SERVICE: getUserProfile called ----'); // More visible log
     final user = supabase.auth.currentUser;
-    if (user == null) return null;
+    if (user == null) {
+      print('AUTH SERVICE: No current user found ----'); // More visible log
+      return null;
+    }
 
     try {
       // First try to get from local storage
       final localProfile = await _offlineStorage.getUserProfile(user.id);
+      debugPrint('getUserProfile: Local profile: $localProfile');
 
       // If online, try to sync with server
       if (await _isOnline()) {
+        debugPrint('getUserProfile: Online, fetching from server');
         final profile = await _fetchAndSaveProfile(user.id);
+        debugPrint('getUserProfile: Server profile: $profile');
         return profile;
+      } else {
+        debugPrint('getUserProfile: Offline, using local profile');
       }
 
       return localProfile;
     } catch (error) {
+      debugPrint('getUserProfile: Error: $error');
       return null;
     }
   }
 
   static Future<bool> _isOnline() async {
     try {
-      final response = await supabase.from('user_profiles').select().limit(1);
-      return response != null;
+      await supabase.from('user_profiles').select().limit(1);
+      return true;
     } catch (e) {
       return false;
     }
@@ -123,13 +133,17 @@ class AuthService {
     String userId,
   ) async {
     try {
+      print(
+        'AUTH SERVICE: Fetching profile for user $userId ----',
+      ); // More visible log
       final response = await supabase
           .from('user_profiles')
           .select()
           .eq('user_id', userId)
           .single();
 
-      if (response != null) {
+      debugPrint('_fetchAndSaveProfile: Raw response: $response');
+      if (response.isNotEmpty) {
         // Prepare profile data with only the fields we need
         final Map<String, dynamic> profile = {
           'user_id': response['user_id'],
@@ -138,11 +152,14 @@ class AuthService {
           'subscription_valid_until': response['subscription_valid_until'],
         };
 
+        debugPrint('_fetchAndSaveProfile: Saving profile: $profile');
         await _offlineStorage.saveUserProfile(profile);
         return profile;
       }
+      debugPrint('_fetchAndSaveProfile: Response was empty');
       return null;
-    } catch (e, stackTrace) {
+    } catch (e) {
+      debugPrint('_fetchAndSaveProfile: Error: $e');
       return null;
     }
   }

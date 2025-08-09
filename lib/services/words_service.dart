@@ -153,7 +153,7 @@ class WordsService {
 
   Future<bool> isDictionaryDownloaded() async {
     try {
-      return await _offlineStorage.isDatabaseValid();
+      return await _offlineStorage.isDictionaryValid();
     } catch (e) {
       return false;
     }

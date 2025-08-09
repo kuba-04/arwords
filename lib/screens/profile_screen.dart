@@ -343,7 +343,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             );
             // Refresh user profile to show new purchase status
-            _checkUser();
+            print('Purchase successful, refreshing user profile...');
+            // Add a small delay to ensure Supabase update propagates
+            Future.delayed(const Duration(milliseconds: 1000), () {
+              if (mounted) {
+                print('Delayed refresh executing...');
+                _checkUser();
+              }
+            });
           } else if (update.status == PurchaseUpdateStatus.error) {
             completed = true;
             setState(() {
@@ -540,10 +547,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfile() {
+    print('PROFILE BUILD START ----'); // This is a more visible log
     debugPrint('Building profile with data: $_userProfile');
     debugPrint(
       'Premium access value: ${_userProfile?['has_offline_dictionary_access']}',
     );
+
+    final hasPremiumAccess =
+        _userProfile?['has_offline_dictionary_access'] == true;
+    debugPrint('Computed hasPremiumAccess: $hasPremiumAccess');
 
     if (_isLoadingProfile) {
       return const Center(child: CircularProgressIndicator());
@@ -573,9 +585,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Profile',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Profile',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                onPressed: _isLoadingProfile
+                    ? null
+                    : () {
+                        print('Manual refresh triggered');
+                        _checkUser();
+                      },
+                icon: _isLoadingProfile
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                tooltip: 'Refresh Profile',
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Text('Email: ${_user?.email}'),
@@ -623,7 +656,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          if (_userProfile?['has_offline_dictionary_access'] == true) ...[
+          if (hasPremiumAccess) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(

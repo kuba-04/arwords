@@ -3,14 +3,15 @@ import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:in_app_purchase/in_app_purchase.dart' as iap;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'revenue_cat_verifier.dart';
-import 'download_service.dart';
+import 'offline_storage_service.dart';
+import 'access_manager.dart';
 import '../models/purchase_update.dart';
 
 class PurchaseService {
   static const String _premiumProductId = 'premium_access';
   final _iap = iap.InAppPurchase.instance;
-  late final ContentDownloadService _downloadService;
   late final RevenueCatVerifier _revenueCatVerifier;
   late StreamSubscription<List<iap.PurchaseDetails>> _subscription;
   List<iap.ProductDetails> products = [];
@@ -21,7 +22,6 @@ class PurchaseService {
   Stream<PurchaseUpdate> get purchaseUpdates => _purchaseController.stream;
 
   PurchaseService() {
-    _downloadService = ContentDownloadService();
     _revenueCatVerifier = RevenueCatVerifier();
   }
 
@@ -296,11 +296,11 @@ class PurchaseService {
               final isValid = await _verifyPurchase(purchaseDetails);
               if (isValid) {
                 await _enablePremiumAccess();
-                await _initiateContentDownload();
                 _purchaseController.add(
                   PurchaseUpdate(
                     status: PurchaseUpdateStatus.purchased,
-                    message: 'Purchase successful!',
+                    message:
+                        'Purchase successful! You can now download the dictionary.',
                   ),
                 );
               } else {
@@ -387,12 +387,66 @@ class PurchaseService {
   }
 
   Future<void> _enablePremiumAccess() async {
+    // Update local SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isPremium', true);
+
+    // Update Supabase user profile
+    await _updateUserProfile();
   }
 
-  Future<void> _initiateContentDownload() async {
-    await _downloadService.downloadDictionary();
+  Future<void> _updateUserProfile() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        await supabase
+            .from('user_profiles')
+            .update({
+              'has_offline_dictionary_access': true,
+              'subscription_valid_until': null, // No expiration for now
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('user_id', user.id);
+        print('User profile updated with premium access in Supabase');
+
+        // Force clear local cache and refresh profile
+        await _clearAndRefreshProfile(user.id);
+      }
+    } catch (e) {
+      print('Error updating user profile: $e');
+      // Don't throw here - we want the purchase to be marked as successful
+      // even if profile update fails, as user can retry later
+    }
+  }
+
+  Future<void> _clearAndRefreshProfile(String userId) async {
+    try {
+      // Clear the local SQLite cache
+      final offlineStorage = OfflineStorageService();
+      await offlineStorage.clearUserProfiles();
+      print('SQLite user profiles cache cleared');
+
+      // Clear SharedPreferences cache
+      final accessManager = AccessManager();
+      await accessManager.clearPremiumAccessCache();
+      print('SharedPreferences premium cache cleared');
+
+      // Force a fresh fetch from Supabase to verify the update worked
+      final supabase = Supabase.instance.client;
+      final freshProfile = await supabase
+          .from('user_profiles')
+          .select()
+          .eq('user_id', userId)
+          .single();
+      print('Fresh profile verification from Supabase: $freshProfile');
+
+      print(
+        'Local profile cache cleared, fresh data will be fetched on next access',
+      );
+    } catch (e) {
+      print('Error clearing profile cache: $e');
+    }
   }
 
   void dispose() {

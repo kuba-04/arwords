@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../models/word.dart';
 import 'package:arwords/services/auth_service.dart';
 
@@ -48,19 +49,7 @@ class OfflineStorageService {
         path,
         version: 1,
         onCreate: (db, version) async {
-          // Tables will be created by the download service
-        },
-        onOpen: (db) async {
-          // Verify tables exist
-          final tables = await db.rawQuery(
-            "SELECT name FROM sqlite_master WHERE type='table' AND (name='words' OR name='word_forms')",
-          );
-
-          if (tables.length != 2) {
-            throw Exception(
-              'Database schema not initialized. Please download dictionary first.',
-            );
-          }
+          // Dictionary tables will be created by the download service
         },
       );
     } catch (e) {
@@ -68,7 +57,7 @@ class OfflineStorageService {
     }
   }
 
-  Future<bool> isDatabaseValid() async {
+  Future<bool> isDictionaryValid() async {
     try {
       final db = await database;
 
@@ -89,6 +78,18 @@ class OfflineStorageService {
       );
 
       return wordCount != null && wordCount > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> isUserProfileTableValid() async {
+    try {
+      final db = await database;
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_profiles'",
+      );
+      return tables.isNotEmpty;
     } catch (e) {
       return false;
     }
@@ -212,18 +213,19 @@ class OfflineStorageService {
   Future<void> saveUserProfile(Map<String, dynamic> profile) async {
     final db = await database;
 
-    // Drop the existing table to update the schema
-    await db.execute('DROP TABLE IF EXISTS user_profiles');
-
-    // Create the table with the correct schema
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS user_profiles (
-        user_id TEXT PRIMARY KEY,
-        has_offline_dictionary_access INTEGER DEFAULT 0,
-        subscription_valid_until TEXT,
-        last_synced TEXT
-      )
-    ''');
+    // Check if table exists and create if needed
+    final tableExists = await isUserProfileTableValid();
+    if (!tableExists) {
+      debugPrint('Creating user_profiles table');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS user_profiles (
+          user_id TEXT PRIMARY KEY,
+          has_offline_dictionary_access INTEGER DEFAULT 0,
+          subscription_valid_until TEXT,
+          last_synced TEXT
+        )
+      ''');
+    }
 
     // Convert boolean to integer for SQLite and prepare data
     final Map<String, dynamic> dbProfile = {
@@ -246,6 +248,13 @@ class OfflineStorageService {
     final db = await database;
 
     try {
+      // Check if table exists first
+      final tableExists = await isUserProfileTableValid();
+      if (!tableExists) {
+        debugPrint('User profiles table does not exist');
+        return null;
+      }
+
       final List<Map<String, dynamic>> results = await db.query(
         'user_profiles',
         where: 'user_id = ?',
@@ -261,6 +270,7 @@ class OfflineStorageService {
 
       return profile;
     } catch (e) {
+      debugPrint('Error getting user profile: $e');
       return null;
     }
   }
