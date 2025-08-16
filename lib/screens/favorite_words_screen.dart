@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/word.dart';
 import '../services/words_service.dart';
+import '../services/error_handler.dart';
+import '../models/word.dart';
 import 'word_details_screen.dart';
 
 class FavoriteWordsScreen extends StatefulWidget {
@@ -20,31 +21,44 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(Supabase.instance.client);
+    _wordsService = WordsService(supabase: Supabase.instance.client);
     _loadFavoriteWords();
   }
 
   Future<void> _loadFavoriteWords() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
+
     try {
       final words = await _wordsService.getFavoriteWords();
-      if (mounted) {
-        setState(() {
-          _favoriteWords = words;
-          _error = null;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _favoriteWords = words;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() => _error = e.toString());
+      if (!mounted) return;
+      String errorMessage;
+      if (e is NetworkException) {
+        errorMessage = e.message;
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
       }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() {
+        _error = errorMessage;
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(label: 'Retry', onPressed: _loadFavoriteWords),
+        ),
+      );
     }
   }
 
@@ -64,8 +78,24 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('ClientException') ||
+            e.toString().contains('Failed to remove from favorite')) {
+          errorMessage =
+              'Managing favorites requires an internet connection. Please check your connection and try again.';
+        } else {
+          errorMessage = 'Error removing from favorites. Please try again.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error removing from favorites: $e')),
+          SnackBar(
+            content: Text(errorMessage),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _removeFromFavorites(word),
+            ),
+          ),
         );
       }
     }

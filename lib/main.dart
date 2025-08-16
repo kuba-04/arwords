@@ -4,26 +4,68 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/words_screen.dart';
 import 'screens/favorite_words_screen.dart';
 import 'screens/profile_screen.dart';
+import 'services/logger_service.dart';
 
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Load environment variables
     await dotenv.load();
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
+
+    // Validate required environment variables
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+    if (supabaseUrl == null || supabaseUrl.isEmpty) {
+      throw Exception('SUPABASE_URL environment variable is not set');
+    }
+    if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+      throw Exception('SUPABASE_ANON_KEY environment variable is not set');
+    }
+
+    // Initialize Supabase with proper error handling
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+        realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 2),
+      );
+
+    } catch (e) {
+      AppLogger.error('Error initializing Supabase', e);
+      rethrow;
+    }
+
     runApp(const MyApp());
   } catch (error, stackTrace) {
-    debugPrint('Error in main: $error');
-    debugPrint('Stack trace: $stackTrace');
-    // Still run the app even if there's an error, but with an error message
+    AppLogger.fatal('Critical error in main', error, stackTrace);
+
+    // Run the app with an error message
     runApp(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: Center(
-            child: Text(
-              'Error initializing app. Please check your configuration.',
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Error initializing app',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -57,15 +99,38 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  bool _wasLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _wasLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
     // Listen to auth state changes
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final event = data.event;
-      if (event == AuthChangeEvent.signedOut && _selectedIndex == 1) {
-        setState(() => _selectedIndex = 0);
+      final isCurrentlyLoggedIn =
+          Supabase.instance.client.auth.currentUser != null;
+
+      // Only reset tab selection when user actually logs out (not on other auth events)
+      if (event == AuthChangeEvent.signedOut && _wasLoggedIn) {
+        setState(() {
+          _selectedIndex = 0; // Go to dictionary tab
+          _wasLoggedIn = false;
+        });
+      } else if (event == AuthChangeEvent.signedIn && !_wasLoggedIn) {
+        setState(() {
+          _wasLoggedIn = true;
+        });
+      } else if (isCurrentlyLoggedIn != _wasLoggedIn) {
+        // Handle other auth state changes that affect login status
+        setState(() {
+          _wasLoggedIn = isCurrentlyLoggedIn;
+          // Only reset to dictionary tab if user logged out
+          if (!isCurrentlyLoggedIn && _selectedIndex == 1) {
+            _selectedIndex = 0;
+          }
+        });
       }
     });
   }
@@ -102,6 +167,11 @@ class _MainScreenState extends State<MainScreen> {
       actualIndex = _screens.length - 1; // This will be the profile screen
     }
 
+    // Ensure we don't select an invalid index
+    if (actualIndex >= _screens.length) {
+      actualIndex = 0; // Default to dictionary tab
+    }
+
     setState(() {
       _selectedIndex = actualIndex;
     });
@@ -109,6 +179,11 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Ensure selected index is always valid
+    if (_selectedIndex >= _screens.length) {
+      _selectedIndex = 0;
+    }
+
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(

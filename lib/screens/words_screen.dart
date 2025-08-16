@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/words_service.dart' show WordDTO, WordsService;
-import 'dart:developer' as developer;
+import '../services/error_handler.dart';
 import 'word_details_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'profile_screen.dart';
 
 // --- Main Screen Widget ---
 
@@ -35,7 +36,10 @@ class _WordsScreenState extends State<WordsScreen> {
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(Supabase.instance.client);
+    _wordsService = WordsService(
+      supabase: Supabase.instance.client,
+      onNotification: _showNotification,
+    );
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -65,7 +69,6 @@ class _WordsScreenState extends State<WordsScreen> {
   }
 
   Future<void> _searchWords(String query) async {
-    developer.log('Searching words with query: "$query"');
     setState(() {
       _isLoading = true;
       _error = null;
@@ -81,11 +84,17 @@ class _WordsScreenState extends State<WordsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      developer.log('Search failed', error: e, stackTrace: StackTrace.current);
+      String errorMessage;
+      if (e is NetworkException) {
+        errorMessage = e.message;
+      } else {
+        errorMessage = 'An unexpected error occurred. Please try again later.';
+      }
       setState(() {
-        _error = e.toString();
+        _error = errorMessage;
         _isLoading = false;
       });
+      _showNotification(errorMessage);
     }
   }
 
@@ -97,6 +106,25 @@ class _WordsScreenState extends State<WordsScreen> {
       _isLoading = false;
       _error = null;
     });
+  }
+
+  void _showNotification(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Go to Profile',
+          onPressed: () {
+            // Navigate to profile screen
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const ProfileScreen()),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -117,9 +145,26 @@ class _WordsScreenState extends State<WordsScreen> {
     }
     if (_error != null) {
       return Center(
-        child: Text(
-          'Error: $_error',
-          style: const TextStyle(color: Colors.red),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
+                  ),
+                );
+              },
+              child: const Text('Go to Profile'),
+            ),
+          ],
         ),
       );
     }
