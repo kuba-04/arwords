@@ -211,7 +211,7 @@ class PurchaseService {
       );
 
       // First, check and consume any existing purchases to prevent "already owned" error
-      await _consumeExistingPurchasesViaRestore();
+      // await _consumeExistingPurchasesViaRestore();
 
       if (products.isEmpty) {
         await loadPurchases();
@@ -234,33 +234,6 @@ class PurchaseService {
         PurchaseUpdate(
           status: PurchaseUpdateStatus.error,
           message: 'Failed to start purchase: $e',
-          error: e,
-        ),
-      );
-      rethrow;
-    }
-  }
-
-  Future<void> restorePurchases() async {
-    try {
-      _purchaseController.add(
-        PurchaseUpdate(
-          status: PurchaseUpdateStatus.pending,
-          message: 'Restoring purchases...',
-        ),
-      );
-
-      // Note: Past purchases will be handled via the purchase stream when restorePurchases() is called
-      AppLogger.purchase(
-        'Restoring purchases to handle any existing purchases...',
-      );
-
-      await _iap.restorePurchases();
-    } catch (e) {
-      _purchaseController.add(
-        PurchaseUpdate(
-          status: PurchaseUpdateStatus.error,
-          message: 'Failed to restore purchases: $e',
           error: e,
         ),
       );
