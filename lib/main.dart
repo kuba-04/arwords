@@ -32,7 +32,6 @@ Future<void> main() async {
         authOptions: FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
         realtimeClientOptions: const RealtimeClientOptions(eventsPerSecond: 2),
       );
-
     } catch (e) {
       AppLogger.error('Error initializing Supabase', e);
       rethrow;
@@ -139,7 +138,7 @@ class _MainScreenState extends State<MainScreen> {
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
     return [
       const WordsScreen(),
-      if (isLoggedIn) const FavoriteWordsScreen(),
+      if (isLoggedIn) const WordsScreen(),
       const ProfileScreen(),
     ];
   }

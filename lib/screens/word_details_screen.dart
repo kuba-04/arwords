@@ -43,9 +43,18 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         supabase: supabase,
         onNotification: (message) {
           if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(message)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                margin: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).size.height - 100,
+                  left: 16,
+                  right: 16,
+                ),
+              ),
+            );
           }
         },
       );
@@ -55,9 +64,18 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         supabase: null,
         onNotification: (message) {
           if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(message)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                margin: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).size.height - 100,
+                  left: 16,
+                  right: 16,
+                ),
+              ),
+            );
           }
         },
       );
@@ -107,7 +125,13 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(context).size.height - 100,
+              left: 16,
+              right: 16,
+            ),
             action: SnackBarAction(label: 'Retry', onPressed: _loadWordDetails),
           ),
         );
@@ -132,6 +156,12 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
             _isFavorite ? 'Added to favorites' : 'Removed from favorites',
           ),
           duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(context).size.height - 100,
+            left: 16,
+            right: 16,
+          ),
         ),
       );
     } catch (e) {
@@ -149,8 +179,14 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           backgroundColor: Colors.red[400],
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(context).size.height - 100,
+            left: 16,
+            right: 16,
+          ),
           action: SnackBarAction(
             label: 'Retry',
             onPressed: _toggleFavorite,
