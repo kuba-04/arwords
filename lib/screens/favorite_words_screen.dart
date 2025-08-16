@@ -14,14 +14,18 @@ class FavoriteWordsScreen extends StatefulWidget {
 
 class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
   late final WordsService _wordsService;
+  late final SupabaseClient _supabase;
   bool _isLoading = true;
   List<Word> _favoriteWords = [];
   String? _error;
+  RealtimeChannel? _subscription;
 
   @override
   void initState() {
     super.initState();
-    _wordsService = WordsService(supabase: Supabase.instance.client);
+    _supabase = Supabase.instance.client;
+    _wordsService = WordsService(supabase: _supabase);
+    _setupRealtimeSubscription();
     _loadFavoriteWords();
   }
 
@@ -99,6 +103,40 @@ class _FavoriteWordsScreenState extends State<FavoriteWordsScreen> {
         );
       }
     }
+  }
+
+  void _setupRealtimeSubscription() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    _subscription = _supabase
+        .channel('public:user_favorite_words')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'user_favorite_words',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
+          ),
+          callback: (payload) async {
+            // Immediately refresh the list when any change occurs
+            if (mounted) {
+              await _loadFavoriteWords();
+            }
+          },
+        )
+        .subscribe();
+
+    // Initial load
+    _loadFavoriteWords();
+  }
+
+  @override
+  void dispose() {
+    _subscription?.unsubscribe();
+    super.dispose();
   }
 
   @override

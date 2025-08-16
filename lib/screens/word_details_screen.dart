@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/words_service.dart' hide WordForm;
 import '../services/error_handler.dart';
+import '../services/access_manager.dart';
 import '../models/word.dart';
 
 class WordDetailsScreen extends StatefulWidget {
@@ -15,8 +16,10 @@ class WordDetailsScreen extends StatefulWidget {
 
 class _WordDetailsScreenState extends State<WordDetailsScreen> {
   late final WordsService _wordsService;
+  late final AccessManager _accessManager;
   bool _isFavorite = false;
   bool _isLoading = true;
+  bool _isPremium = false;
   String? _error;
   Word? _word;
 
@@ -29,7 +32,8 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
   @override
   void initState() {
     super.initState();
-
+    _accessManager = AccessManager();
+    _checkPremiumStatus();
     // Initialize WordsService with Supabase client only if we can connect
     try {
       final supabase = Supabase.instance.client;
@@ -60,6 +64,20 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
     }
 
     _loadWordDetails();
+  }
+
+  Future<void> _checkPremiumStatus() async {
+    try {
+      final isPremium = await _accessManager.verifyPremiumAccess();
+      setState(() {
+        _isPremium = isPremium;
+      });
+    } catch (e) {
+      // Handle error silently
+      setState(() {
+        _isPremium = false;
+      });
+    }
   }
 
   Future<void> _loadWordDetails() async {
@@ -99,13 +117,15 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
 
   Future<void> _toggleFavorite() async {
     try {
+      final newState = !_isFavorite;
       if (_isFavorite) {
         await _wordsService.removeFromFavorites(widget.wordId);
       } else {
         await _wordsService.addToFavorites(widget.wordId);
       }
-      setState(() => _isFavorite = !_isFavorite);
+      setState(() => _isFavorite = newState);
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -130,7 +150,12 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
         SnackBar(
           content: Text(errorMessage),
           duration: const Duration(seconds: 3),
-          action: SnackBarAction(label: 'Retry', onPressed: _toggleFavorite),
+          backgroundColor: Colors.red[400],
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: _toggleFavorite,
+            textColor: Colors.white,
+          ),
         ),
       );
     }
@@ -240,9 +265,10 @@ class _WordDetailsScreenState extends State<WordDetailsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          if (_wordsService.isOnline &&
-              _wordsService
-                  .isAuthenticated) // Show only when online and authenticated
+          if (_isPremium ||
+              (_wordsService.isOnline &&
+                  _wordsService
+                      .isAuthenticated)) // Show for premium users (even offline) or online authenticated users
             IconButton(
               icon: Icon(
                 _isFavorite ? Icons.favorite : Icons.favorite_border,

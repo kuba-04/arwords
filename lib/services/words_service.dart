@@ -6,6 +6,7 @@ import 'offline_storage_service.dart';
 import 'download_service.dart';
 import 'error_handler.dart';
 import 'logger_service.dart';
+import 'connectivity_service.dart';
 
 class WordDTO {
   final String id;
@@ -139,6 +140,7 @@ class WordsService {
   final AccessManager _accessManager;
   final OfflineStorageService _offlineStorage;
   final ContentDownloadService _downloadService;
+  final ConnectivityService _connectivityService;
   void Function(String)? onNotification;
   bool _isDownloading = false;
 
@@ -146,9 +148,10 @@ class WordsService {
     : _supabase = supabase,
       _accessManager = AccessManager(),
       _offlineStorage = OfflineStorageService(),
-      _downloadService = ContentDownloadService();
+      _downloadService = ContentDownloadService(),
+      _connectivityService = ConnectivityService();
 
-  bool get isOnline => _supabase != null;
+  bool get isOnline => _connectivityService.isOnline;
   bool get isAuthenticated => _supabase?.auth.currentUser != null;
 
   Future<bool> isDictionaryDownloaded() async {
@@ -311,12 +314,13 @@ class WordsService {
         pagination: PaginationDTO(
           page: page,
           limit: pageSize,
-          total: count.count ?? 0,
+          total: count.count,
         ),
       );
     } catch (error) {
       if (error is SocketException ||
-          error.toString().contains('ClientException')) {
+          (error is Exception &&
+              error.toString().contains('ClientException'))) {
         throw NetworkException(
           'No internet connection available. Please check your connection or download the dictionary for offline use.',
         );
@@ -392,16 +396,16 @@ class WordsService {
 
       // Check if we can do online search
       if (_supabase == null) {
-        throw Exception(
+        throw NetworkException(
           'Cannot fetch favorites: No internet connection and no offline dictionary available',
         );
       }
 
-      final user = _supabase?.auth.currentUser;
+      final user = _supabase.auth.currentUser;
       if (user == null) throw Exception('User not authenticated');
 
       final response = await _supabase
-          ?.from('user_favorite_words')
+          .from('user_favorite_words')
           .select('''
           words!inner (
             id,
@@ -434,29 +438,47 @@ class WordsService {
       final isPremium = await _accessManager.verifyPremiumAccess();
       final isDownloaded = await isDictionaryDownloaded();
 
-      // For premium users with downloaded dictionary, update offline storage
+      // For premium users with downloaded dictionary, update offline storage first
       if (isPremium && isDownloaded) {
         await _offlineStorage.toggleFavorite(wordId, true);
       }
 
-      // If online, also update remote database
-      if (_supabase != null) {
-        final user = _supabase?.auth.currentUser;
+      // If online, update remote database
+      if (_connectivityService.isOnline && _supabase != null) {
+        final user = _supabase.auth.currentUser;
         if (user == null) throw Exception('User not authenticated');
 
-        // Check if already favorited
-        final existing = await _supabase
-            ?.from('user_favorite_words')
-            .select()
-            .match({'user_id': user.id, 'word_id': wordId});
+        try {
+          // Check if already favorited
+          final existing = await _supabase
+              .from('user_favorite_words')
+              .select()
+              .match({'user_id': user.id, 'word_id': wordId});
 
-        if (existing == null || (existing as List).isEmpty) {
-          // Only insert if not already favorited
-          await _supabase?.from('user_favorite_words').insert({
-            'user_id': user.id,
-            'word_id': wordId,
-          });
+          if ((existing as List).isEmpty) {
+            // Only insert if not already favorited
+            await _supabase.from('user_favorite_words').insert({
+              'user_id': user.id,
+              'word_id': wordId,
+            });
+          }
+        } catch (e) {
+          AppLogger.words(
+            'Failed to sync favorite with server, will sync later',
+            level: 'warning',
+            error: e,
+          );
+          // If online sync fails but we have offline storage, keep the local change
+          if (!(isPremium && isDownloaded)) {
+            // Only rethrow if we don't have offline storage
+            throw Exception('Failed to add to favorites: $e');
+          }
         }
+      } else if (!(isPremium && isDownloaded)) {
+        // If we're offline and don't have offline storage, throw an error
+        throw Exception(
+          'Cannot add to favorites: No internet connection and no offline storage available',
+        );
       }
     } catch (error) {
       AppLogger.words(
@@ -480,14 +502,23 @@ class WordsService {
       }
 
       // If online, also update remote database
-      if (_supabase != null) {
-        final user = _supabase?.auth.currentUser;
+      if (_connectivityService.isOnline && _supabase != null) {
+        final user = _supabase.auth.currentUser;
         if (user == null) throw Exception('User not authenticated');
 
-        await _supabase?.from('user_favorite_words').delete().match({
-          'user_id': user.id,
-          'word_id': wordId,
-        });
+        try {
+          await _supabase.from('user_favorite_words').delete().match({
+            'user_id': user.id,
+            'word_id': wordId,
+          });
+        } catch (e) {
+          AppLogger.words(
+            'Failed to sync favorite removal with server, will sync later',
+            level: 'warning',
+            error: e,
+          );
+          // Don't rethrow - we already saved to offline storage
+        }
       }
     } catch (error) {
       throw Exception('Failed to remove from favorites: $error');
@@ -505,7 +536,6 @@ class WordsService {
       final isPremium = await _accessManager.verifyPremiumAccess();
       final isDownloaded = await isDictionaryDownloaded();
 
-      
       // For premium users with downloaded dictionary, check offline storage
       if (isPremium && isDownloaded) {
         final word = await _offlineStorage.getWord(wordId);
@@ -514,12 +544,12 @@ class WordsService {
 
       // If online, check remote database
       if (_supabase != null) {
-        final user = _supabase?.auth.currentUser;
+        final user = _supabase.auth.currentUser;
         // Return false if user is not authenticated instead of throwing error
         if (user == null) return false;
 
         final response = await _supabase
-            ?.from('user_favorite_words')
+            .from('user_favorite_words')
             .select()
             .match({'user_id': user.id, 'word_id': wordId});
         return (response as List).isNotEmpty;
