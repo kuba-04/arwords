@@ -114,15 +114,15 @@ class _WordsScreenState extends State<WordsScreen> {
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Go to Profile',
-          onPressed: () {
-            // Navigate to profile screen
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const ProfileScreen()),
-            );
-          },
-        ),
+        // action: SnackBarAction(
+        //   label: 'Go to Profile',
+        //   onPressed: () {
+        //     // Navigate to profile screen
+        //     Navigator.of(context).pushReplacement(
+        //       MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        //     );
+        //   },
+        // ),
       ),
     );
   }

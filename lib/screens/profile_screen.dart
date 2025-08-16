@@ -311,21 +311,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   StreamSubscription<PurchaseUpdate>? _purchaseSubscription;
 
   Future<void> _handlePurchase() async {
-    await _processPurchaseAction(() => _purchaseService.buyPremiumAccess());
-  }
-
-  Future<void> _handleRestorePurchases() async {
-    await _processPurchaseAction(() => _purchaseService.restorePurchases());
-  }
-
-  Future<void> _processPurchaseAction(Future<void> Function() action) async {
     try {
       setState(() {
         _isPurchasing = true;
         _error = null;
       });
 
-      // Subscribe to purchase updates
       // Cancel any previous subscription to avoid duplicate listeners
       try {
         await _purchaseSubscription?.cancel();
@@ -334,57 +325,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
       bool completed = false;
       _purchaseSubscription = _purchaseService.purchaseUpdates.listen(
         (update) {
-          // Handle purchase updates
-          if (update.status == PurchaseUpdateStatus.pending) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(update.message),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          } else if (update.status == PurchaseUpdateStatus.purchased) {
-            completed = true;
-            setState(() {
-              _isPurchasing = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(update.message),
-                backgroundColor: Colors.green,
-              ),
-            );
-            // Refresh user profile to show new purchase status
-            AppLogger.profile(
-              'Purchase successful, refreshing user profile...',
-            );
-            // Add a small delay to ensure Supabase update propagates
-            Future.delayed(const Duration(milliseconds: 1000), () {
-              if (mounted) {
-                AppLogger.profile(
-                  'Delayed refresh executing...',
-                  level: 'debug',
-                );
-                _checkUser();
-              }
-            });
-          } else if (update.status == PurchaseUpdateStatus.error) {
-            completed = true;
-            setState(() {
-              _isPurchasing = false;
-              _error = update.message;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(update.message),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 5),
-                action: SnackBarAction(
-                  label: 'Retry',
-                  textColor: Colors.white,
-                  onPressed: () => _processPurchaseAction(action),
+          switch (update.status) {
+            case PurchaseUpdateStatus.pending:
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(update.message),
+                  duration: const Duration(seconds: 2),
                 ),
-              ),
-            );
+              );
+              break;
+            case PurchaseUpdateStatus.purchased:
+              completed = true;
+              setState(() {
+                _isPurchasing = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(update.message),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              // Refresh user profile to show new purchase status
+              AppLogger.profile(
+                'Purchase successful, refreshing user profile...',
+              );
+              // Add a small delay to ensure Supabase update propagates
+              Future.delayed(const Duration(milliseconds: 1000), () {
+                if (mounted) {
+                  AppLogger.profile(
+                    'Delayed refresh executing...',
+                    level: 'debug',
+                  );
+                  _checkUser();
+                }
+              });
+              break;
+            case PurchaseUpdateStatus.error:
+              completed = true;
+              setState(() {
+                _isPurchasing = false;
+                _error = update.message;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(update.message),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 5),
+                  action: SnackBarAction(
+                    label: 'Retry',
+                    textColor: Colors.white,
+                    onPressed: _handlePurchase,
+                  ),
+                ),
+              );
+              break;
           }
         },
         onError: (error) {
@@ -402,7 +396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
 
-      // Safety timeout in case no events are received (e.g., billing UI failed to open)
+      // Safety timeout in case no events are received
       Future.delayed(const Duration(seconds: 30), () {
         if (!mounted || completed) return;
         setState(() {
@@ -418,22 +412,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       });
 
-      await action();
+      await _purchaseService.buyPremiumAccess();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isPurchasing = false;
-        _error = 'Failed to process purchase action: $e';
+        _error = 'Failed to initiate purchase: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Action failed: $e'),
+          content: Text('Purchase failed: $e'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 5),
           action: SnackBarAction(
             label: 'Retry',
             textColor: Colors.white,
-            onPressed: () => _processPurchaseAction(action),
+            onPressed: _handlePurchase,
           ),
         ),
       );
@@ -573,7 +567,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildProfile() {
     final hasPremiumAccess =
         _userProfile?['has_offline_dictionary_access'] == true;
-    
+
     if (_isLoadingProfile) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -758,16 +752,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             backgroundColor: Theme.of(context).primaryColor,
                             foregroundColor: Colors.white,
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: _isPurchasing
-                              ? null
-                              : _handleRestorePurchases,
-                          child: const Text('Restore Purchases'),
                         ),
                       ),
                     ],
