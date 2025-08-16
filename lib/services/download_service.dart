@@ -111,8 +111,7 @@ class ContentDownloadService {
           'Failed to verify database tables after creation',
         );
       }
-
-      } catch (e) {
+    } catch (e) {
       AppLogger.download(
         'Failed to create database schema',
         level: 'error',
@@ -233,7 +232,7 @@ class ContentDownloadService {
         );
 
         final totalWords = words.length;
-      
+
         // Process words in batches
         const batchSize = 100;
         for (var i = 0; i < words.length; i += batchSize) {
@@ -325,7 +324,6 @@ class ContentDownloadService {
             'Data verification failed: Expected $totalWords words, but found $wordCount',
           );
         }
-
       } catch (e) {
         if (e is PostgrestException) {
           throw NetworkException('Database error: ${e.message}');
