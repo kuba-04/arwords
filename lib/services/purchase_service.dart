@@ -263,7 +263,7 @@ class PurchaseService {
           PurchaseUpdate(
             status: PurchaseUpdateStatus.error,
             message:
-                'In-app purchases are not available in this version for iOS devices. This feature will be enabled in a future update.',
+                'In-app purchases are not available in this version for iOS devices. This feature will be enabled in a future updates.',
           ),
         );
         return;
@@ -630,6 +630,18 @@ class PurchaseService {
   /// Restore purchases for both Android and iOS platforms
   Future<void> restorePurchases() async {
     try {
+      // Check if we're on iOS and payments are disabled
+      if (Platform.isIOS && !_iosPaymentsEnabled) {
+        _purchaseController.add(
+          PurchaseUpdate(
+            status: PurchaseUpdateStatus.error,
+            message:
+                'Restore purchases is not available in this version for iOS devices. This feature will be enabled in a future update.',
+          ),
+        );
+        return;
+      }
+
       AppLogger.purchase('Restoring purchases from $_storeName...');
 
       _purchaseController.add(
