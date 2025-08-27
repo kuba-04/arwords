@@ -434,6 +434,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _handleRestorePurchases() async {
+    try {
+      setState(() {
+        _isPurchasing = true;
+        _error = null;
+      });
+
+      await _purchaseService.restorePurchases();
+
+      // The purchase stream listener will handle the UI updates
+      // We just need to reset the purchasing state after a delay
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _isPurchasing = false;
+          });
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isPurchasing = false;
+        _error = 'Failed to restore purchases: $e';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to restore purchases: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleDownloadDictionary() async {
     try {
       setState(() {
@@ -751,6 +785,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Theme.of(context).primaryColor,
                             foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isPurchasing
+                              ? null
+                              : _handleRestorePurchases,
+                          icon: _isPurchasing
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).primaryColor,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.restore),
+                          label: const Text('Restore Purchases'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Theme.of(context).primaryColor,
+                            side: BorderSide(
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
                         ),
                       ),

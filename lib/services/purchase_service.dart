@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:in_app_purchase/in_app_purchase.dart' as iap;
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
+import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'revenue_cat_verifier.dart';
@@ -11,8 +13,28 @@ import 'access_manager.dart';
 import 'logger_service.dart';
 import '../models/purchase_update.dart';
 
+/// iOS-specific payment queue delegate for handling pending transactions
+class ExamplePaymentQueueDelegate implements SKPaymentQueueDelegateWrapper {
+  @override
+  bool shouldContinueTransaction(
+    SKPaymentTransactionWrapper transaction,
+    SKStorefrontWrapper storefront,
+  ) {
+    return true;
+  }
+
+  @override
+  bool shouldShowPriceConsent() {
+    return false;
+  }
+}
+
+/// Cross-platform purchase service supporting both Android (Google Play Store) and iOS (Apple App Store)
 class PurchaseService {
   static const String _premiumProductId = 'premium_access';
+  // Feature flag for iOS purchases
+  static const bool _iosPaymentsEnabled =
+      false; // Set to true when ready for iOS payments
   final _iap = iap.InAppPurchase.instance;
   late final RevenueCatVerifier _revenueCatVerifier;
   late StreamSubscription<List<iap.PurchaseDetails>> _subscription;
@@ -23,6 +45,10 @@ class PurchaseService {
   final _purchaseController = StreamController<PurchaseUpdate>.broadcast();
   Stream<PurchaseUpdate> get purchaseUpdates => _purchaseController.stream;
 
+  /// Get the current platform's store name
+  String get _storeName =>
+      Platform.isAndroid ? 'Google Play Store' : 'Apple App Store';
+
   PurchaseService() {
     _revenueCatVerifier = RevenueCatVerifier();
   }
@@ -31,6 +57,8 @@ class PurchaseService {
     try {
       final available = await _iap.isAvailable();
       AppLogger.purchase('IAP available: $available');
+
+      // Platform-specific initialization
       if (Platform.isAndroid) {
         // Force a connection attempt to Google Play
         try {
@@ -53,7 +81,34 @@ class PurchaseService {
           // Continue with initialization even if this check fails
           // as the main isAvailable() call might still work
         }
+      } else if (Platform.isIOS) {
+        // iOS-specific initialization
+        if (_iosPaymentsEnabled) {
+          try {
+            // Enable pending purchases for iOS
+            final InAppPurchaseStoreKitPlatformAddition
+            iosPlatformAddition = _iap
+                .getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+            await iosPlatformAddition.setDelegate(
+              ExamplePaymentQueueDelegate(),
+            );
+            AppLogger.purchase('$_storeName connection successful');
+          } catch (e) {
+            AppLogger.purchase(
+              '$_storeName connection error',
+              level: 'warning',
+              error: e,
+            );
+            // Continue with initialization even if this check fails
+          }
+        } else {
+          AppLogger.purchase(
+            'iOS payments are disabled in this version',
+            level: 'info',
+          );
+        }
       }
+
       if (!available) {
         lastError = 'In-app purchases are not available on this device';
         return;
@@ -133,7 +188,7 @@ class PurchaseService {
           _iap.queryProductDetails(ids),
           Future.delayed(const Duration(seconds: 15), () {
             throw TimeoutException(
-              'Product details query timed out after 15 seconds. This might be due to Google Play Billing connectivity issues.',
+              'Product details query timed out after 15 seconds. This might be due to $_storeName connectivity issues.',
               const Duration(seconds: 15),
             );
           }),
@@ -202,16 +257,24 @@ class PurchaseService {
 
   Future<void> buyPremiumAccess() async {
     try {
+      // Check if we're on iOS and payments are disabled
+      if (Platform.isIOS && !_iosPaymentsEnabled) {
+        _purchaseController.add(
+          PurchaseUpdate(
+            status: PurchaseUpdateStatus.error,
+            message:
+                'In-app purchases are not available in this version for iOS devices. This feature will be enabled in a future updates.',
+          ),
+        );
+        return;
+      }
       // Inform UI that we're launching the billing flow
       _purchaseController.add(
         PurchaseUpdate(
           status: PurchaseUpdateStatus.pending,
-          message: 'Opening Google Play billing...',
+          message: 'Opening $_storeName billing...',
         ),
       );
-
-      // First, check and consume any existing purchases to prevent "already owned" error
-      // await _consumeExistingPurchasesViaRestore();
 
       if (products.isEmpty) {
         await loadPurchases();
@@ -267,21 +330,31 @@ class PurchaseService {
             break;
           case iap.PurchaseStatus.purchased:
           case iap.PurchaseStatus.restored:
-            // For restored purchases of consumables on Android, consume them to allow re-purchasing
+            // For restored purchases of consumables, consume them to allow re-purchasing
             if (purchaseDetails.status == iap.PurchaseStatus.restored &&
-                purchaseDetails.productID == _premiumProductId &&
-                Platform.isAndroid) {
+                purchaseDetails.productID == _premiumProductId) {
               AppLogger.purchase(
                 'Found restored consumable purchase, consuming it to allow re-purchasing...',
               );
               try {
-                final InAppPurchaseAndroidPlatformAddition androidAddition =
-                    _iap
-                        .getPlatformAddition<
-                          InAppPurchaseAndroidPlatformAddition
-                        >();
-                await androidAddition.consumePurchase(purchaseDetails);
-                AppLogger.purchase('Successfully consumed restored purchase');
+                if (Platform.isAndroid) {
+                  // Android-specific consumption
+                  final InAppPurchaseAndroidPlatformAddition androidAddition =
+                      _iap
+                          .getPlatformAddition<
+                            InAppPurchaseAndroidPlatformAddition
+                          >();
+                  await androidAddition.consumePurchase(purchaseDetails);
+                  AppLogger.purchase(
+                    'Successfully consumed restored purchase on Android',
+                  );
+                } else if (Platform.isIOS) {
+                  // iOS automatically handles consumption for consumable products
+                  // We just need to complete the purchase
+                  AppLogger.purchase(
+                    'iOS automatically handles consumable consumption',
+                  );
+                }
 
                 // Complete the purchase and skip further processing since this is just cleanup
                 if (purchaseDetails.pendingCompletePurchase) {
@@ -423,21 +496,26 @@ class PurchaseService {
     if (purchaseDetails.productID == _premiumProductId) {
       AppLogger.purchase('🔄 Consuming purchase to allow future purchases...');
 
-      // For Android, explicitly consume the purchase to allow re-purchasing
       if (Platform.isAndroid) {
+        // For Android, explicitly consume the purchase to allow re-purchasing
         try {
           final InAppPurchaseAndroidPlatformAddition androidAddition = _iap
               .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
           await androidAddition.consumePurchase(purchaseDetails);
-          AppLogger.purchase('✅ Purchase consumed successfully');
+          AppLogger.purchase('✅ Purchase consumed successfully on Android');
         } catch (e) {
           AppLogger.purchase(
-            '⚠️ Error consuming purchase: $e',
+            '⚠️ Error consuming purchase on Android: $e',
             level: 'warning',
             error: e,
           );
           // Continue anyway - the purchase was successful, just consumption failed
         }
+      } else if (Platform.isIOS) {
+        // iOS automatically handles consumption for consumable products
+        AppLogger.purchase(
+          '✅ iOS automatically handles consumable consumption',
+        );
       }
     }
 
@@ -549,28 +627,49 @@ class PurchaseService {
     }
   }
 
-  Future<void> _consumeExistingPurchasesViaRestore() async {
+  /// Restore purchases for both Android and iOS platforms
+  Future<void> restorePurchases() async {
     try {
-      AppLogger.purchase('Consuming existing purchases via restore...');
-
-      // For Android, we can also check if any consumables need to be consumed
-      if (Platform.isAndroid) {
-        // Trigger a restore which will call our purchase stream listener
-        // where we'll handle consumption of any existing purchases
-        await _iap.restorePurchases();
-
-        // Give a small delay to allow the purchase stream to process
-        await Future.delayed(const Duration(milliseconds: 500));
+      // Check if we're on iOS and payments are disabled
+      if (Platform.isIOS && !_iosPaymentsEnabled) {
+        _purchaseController.add(
+          PurchaseUpdate(
+            status: PurchaseUpdateStatus.error,
+            message:
+                'Restore purchases is not available in this version for iOS devices. This feature will be enabled in a future update.',
+          ),
+        );
+        return;
       }
 
-      AppLogger.purchase('Existing purchases check completed');
+      AppLogger.purchase('Restoring purchases from $_storeName...');
+
+      _purchaseController.add(
+        PurchaseUpdate(
+          status: PurchaseUpdateStatus.pending,
+          message: 'Restoring purchases from $_storeName...',
+        ),
+      );
+
+      await _iap.restorePurchases();
+
+      // Give a small delay to allow the purchase stream to process
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      AppLogger.purchase('Purchase restoration completed');
     } catch (e) {
       AppLogger.purchase(
-        'Error checking existing purchases via restore: $e',
-        level: 'warning',
+        'Error restoring purchases: $e',
+        level: 'error',
         error: e,
       );
-      // Don't throw - continue with purchase attempt
+      _purchaseController.add(
+        PurchaseUpdate(
+          status: PurchaseUpdateStatus.error,
+          message: 'Failed to restore purchases: $e',
+          error: e,
+        ),
+      );
     }
   }
 

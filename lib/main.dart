@@ -138,7 +138,7 @@ class _MainScreenState extends State<MainScreen> {
     final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
     return [
       const WordsScreen(),
-      if (isLoggedIn) const WordsScreen(),
+      if (isLoggedIn) const FavoriteWordsScreen(),
       const ProfileScreen(),
     ];
   }
