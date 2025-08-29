@@ -154,6 +154,10 @@ class WordsService {
   bool get isOnline => _connectivityService.isOnline;
   bool get isAuthenticated => _supabase?.auth.currentUser != null;
 
+  Future<bool> checkConnectivity() async {
+    return await _connectivityService.checkConnectivity();
+  }
+
   Future<bool> isDictionaryDownloaded() async {
     try {
       return await _offlineStorage.isDictionaryValid();
@@ -444,7 +448,7 @@ class WordsService {
       }
 
       // If online, update remote database
-      if (_connectivityService.isOnline && _supabase != null) {
+      if (await _connectivityService.checkConnectivity() && _supabase != null) {
         final user = _supabase.auth.currentUser;
         if (user == null) throw Exception('User not authenticated');
 
@@ -502,7 +506,7 @@ class WordsService {
       }
 
       // If online, also update remote database
-      if (_connectivityService.isOnline && _supabase != null) {
+      if (await _connectivityService.checkConnectivity() && _supabase != null) {
         final user = _supabase.auth.currentUser;
         if (user == null) throw Exception('User not authenticated');
 

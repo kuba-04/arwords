@@ -7,12 +7,6 @@
       "size" : "20x20"
     },
     {
-        "filename" : "240.png",
-        "idiom" : "iphone",
-        "scale" : "1x",
-        "size" : "120x120"
-    },
-    {
       "filename" : "60.png",
       "idiom" : "iphone",
       "scale" : "3x",
@@ -327,7 +321,6 @@
       "subtype" : "44mm"
     },
     {
-      "filename" : "234.png",
       "idiom" : "watch",
       "role" : "quickLook",
       "scale" : "2x",
