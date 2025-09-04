@@ -33,7 +33,7 @@ class ExamplePaymentQueueDelegate implements SKPaymentQueueDelegateWrapper {
 class PurchaseService {
   static const String _premiumProductId = 'premium_access';
   // Feature flag for iOS purchases
-  static const bool _iosPaymentsEnabled =
+  static const bool iosPaymentsEnabled =
       false; // Set to true when ready for iOS payments
   final _iap = iap.InAppPurchase.instance;
   late final RevenueCatVerifier _revenueCatVerifier;
@@ -83,7 +83,7 @@ class PurchaseService {
         }
       } else if (Platform.isIOS) {
         // iOS-specific initialization
-        if (_iosPaymentsEnabled) {
+        if (iosPaymentsEnabled) {
           try {
             // Enable pending purchases for iOS
             final InAppPurchaseStoreKitPlatformAddition
@@ -258,7 +258,7 @@ class PurchaseService {
   Future<void> buyPremiumAccess() async {
     try {
       // Check if we're on iOS and payments are disabled
-      if (Platform.isIOS && !_iosPaymentsEnabled) {
+      if (Platform.isIOS && !iosPaymentsEnabled) {
         _purchaseController.add(
           PurchaseUpdate(
             status: PurchaseUpdateStatus.error,
@@ -631,7 +631,7 @@ class PurchaseService {
   Future<void> restorePurchases() async {
     try {
       // Check if we're on iOS and payments are disabled
-      if (Platform.isIOS && !_iosPaymentsEnabled) {
+      if (Platform.isIOS && !iosPaymentsEnabled) {
         _purchaseController.add(
           PurchaseUpdate(
             status: PurchaseUpdateStatus.error,

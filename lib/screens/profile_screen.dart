@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show User, Session, AuthChangeEvent, AuthException;
@@ -658,34 +659,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
           Text('Email: ${_user?.email}'),
           const SizedBox(height: 10),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text('Premium Access: '),
-              if (_userProfile != null) ...[
-                Icon(
-                  _userProfile!['has_offline_dictionary_access'] == true
-                      ? Icons.check_circle
-                      : Icons.cancel,
-                  color: _userProfile!['has_offline_dictionary_access'] == true
-                      ? Colors.green
-                      : Colors.red,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _userProfile!['has_offline_dictionary_access'] == true
-                      ? 'Active'
-                      : 'Inactive',
-                  style: TextStyle(
+          if (Platform.isAndroid || PurchaseService.iosPaymentsEnabled)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('Premium Access: '),
+                if (_userProfile != null) ...[
+                  Icon(
+                    _userProfile!['has_offline_dictionary_access'] == true
+                        ? Icons.check_circle
+                        : Icons.cancel,
                     color:
                         _userProfile!['has_offline_dictionary_access'] == true
                         ? Colors.green
                         : Colors.red,
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _userProfile!['has_offline_dictionary_access'] == true
+                        ? 'Active'
+                        : 'Inactive',
+                    style: TextStyle(
+                      color:
+                          _userProfile!['has_offline_dictionary_access'] == true
+                          ? Colors.green
+                          : Colors.red,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
           if (_userProfile?['subscription_valid_until'] != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -730,7 +733,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 10),
-          ] else ...[
+          ] else if (Platform.isAndroid ||
+              PurchaseService.iosPaymentsEnabled) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
