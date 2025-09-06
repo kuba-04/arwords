@@ -34,7 +34,7 @@ class PurchaseService {
   static const String _premiumProductId = 'premium_access';
   // Feature flag for iOS purchases
   static const bool iosPaymentsEnabled =
-      false; // Set to true when ready for iOS payments
+      true; // Set to true when ready for iOS payments
   final _iap = iap.InAppPurchase.instance;
   late final RevenueCatVerifier _revenueCatVerifier;
   late StreamSubscription<List<iap.PurchaseDetails>> _subscription;
